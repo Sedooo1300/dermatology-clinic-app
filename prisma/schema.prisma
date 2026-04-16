@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// الحالات / المرضى
+model Patient {
+  id            String   @id @default(cuid())
+  name          String
+  phone         String?
+  age           Int?
+  gender        String   @default("male") // male, female
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  visits        Visit[]
+  photos        PatientPhoto[]
+  alerts        Alert[]
+}
+
+// أنواع الجلسات
+model SessionType {
+  id            String   @id @default(cuid())
+  name          String
+  price         Float    @default(0)
+  description   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  visits        Visit[]
+}
+
+// الزيارات / الجلسات
+model Visit {
+  id            String   @id @default(cuid())
+  patientId     String
+  sessionTypeId String?
+  date          DateTime @default(now())
+  price         Float    @default(0)
+  paid          Float    @default(0)
+  remaining     Float    @default(0)
+  notes         String?
+  status        String   @default("completed") // completed, cancelled, scheduled
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  sessionType   SessionType? @relation(fields: [sessionTypeId], references: [id], onDelete: SetNull)
+
+  laserTreatments LaserTreatment[]
+}
+
+// ليزر إزالة الشعر
+model LaserTreatment {
+  id            String   @id @default(cuid())
+  visitId       String
+  area          String   // المنطقة المعالجة
+  skinType      String?  // نوع البشرة (1-6)
+  hairColor     String?  // لون الشعر
+  skinSensitivity String? // حساسية البشرة
+  fluence       String?  // الطاقة (J/cm2)
+  pulseWidth    String?  // عرض النبضة (ms)
+  spotSize      String?  // حجم البقعة (mm)
+  coolingType   String?  // نوع التبريد
+  painLevel     Int?     // مستوى الألم (1-10)
+  progress      String?  // نسبة التقدم
+  sessionsDone  Int      @default(0)
+  sessionsTotal Int      @default(0)
+  nextSessionDate DateTime?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  visit         Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+}
+
+// صور قبل وبعد
+model PatientPhoto {
+  id            String   @id @default(cuid())
+  patientId     String
+  visitId       String?
+  type          String   @default("before") // before, after
+  photoUrl      String   // base64 or path
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+// المصروفات
+model Expense {
+  id            String   @id @default(cuid())
+  category      String
+  amount        Float
+  description   String?
+  date          DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// الإيرادات
+model Revenue {
+  id            String   @id @default(cuid())
+  category      String   @default("sessions")
+  amount        Float
+  description   String?
+  date          DateTime @default(now())
+  visitId       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// التنبيهات والإشعارات
+model Alert {
+  id            String   @id @default(cuid())
+  patientId     String?
+  title         String
+  message       String
+  type          String   @default("reminder") // reminder, followup, warning
+  date          DateTime @default(now())
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  patient       Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+}
+
+// نسخ احتياطية
+model Backup {
+  id            String   @id @default(cuid())
+  name          String
+  data          String   // JSON backup data
+  size          Int      @default(0)
+  createdAt     DateTime @default(now())
+}
