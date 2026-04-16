@@ -4,8 +4,8 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+// Always create fresh client to pick up schema changes
 export const db =
-  globalForPrisma.prisma ??
   new PrismaClient({
     log: ['query'],
   })
