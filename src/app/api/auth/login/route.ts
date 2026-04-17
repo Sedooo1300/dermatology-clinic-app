@@ -1,8 +1,30 @@
-import { query } from '@/lib/db'
+import { query, uuid } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
+
+// Ensure AppUser table exists
+async function ensureAppUserTable() {
+  try {
+    await query(`SELECT 1 FROM "AppUser" LIMIT 1`)
+  } catch {
+    await query(`
+      CREATE TABLE IF NOT EXISTS "AppUser" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "name" TEXT NOT NULL,
+        "role" TEXT NOT NULL DEFAULT 'receptionist',
+        "pin" TEXT NOT NULL,
+        "isActive" BOOLEAN NOT NULL DEFAULT true,
+        "lastLogin" TIMESTAMP,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureAppUserTable()
+
     const { pin } = await req.json()
     if (!pin || String(pin).length < 3) {
       return NextResponse.json({ error: 'PIN مطلوب (3 أرقام على الأقل)' }, { status: 400 })

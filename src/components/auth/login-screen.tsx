@@ -25,13 +25,25 @@ export function LoginScreen() {
   const [seeding, setSeeding] = useState(false)
   const [loggedInUser, setLoggedInUser] = useState<{ name: string; role: string } | null>(null)
 
-  // Check if setup is needed (no users exist)
+  // Check if setup is needed and auto-seed if no users
   useEffect(() => {
     async function checkSetup() {
       try {
         const res = await fetch('/api/auth/seed')
         const data = await res.json()
-        setNeedsSetup(!data.hasUsers)
+        if (!data.hasUsers) {
+          // Auto-seed: create default users
+          const seedRes = await fetch('/api/auth/seed', { method: 'POST' })
+          const seedData = await seedRes.json()
+          if (seedData.seeded) {
+            setNeedsSetup(false)
+            toast.success('تم إنشاء المستخدمين الافتراضيين', {
+              description: 'مدير: 1234 | استقبال: 0000',
+            })
+          } else {
+            setNeedsSetup(true)
+          }
+        }
       } catch {
         setNeedsSetup(true)
       } finally {
@@ -51,9 +63,12 @@ export function LoginScreen() {
         toast.success('تم إنشاء المستخدمين الافتراضيين', {
           description: 'مدير: 1234 | استقبال: 0000',
         })
+      } else {
+        // Users already exist, just show login
+        setNeedsSetup(false)
       }
     } catch {
-      toast.error('فشل في تهيئة المستخدمين')
+      toast.error('فشل في تهيئة المستخدمين - حاول مرة أخرى')
     } finally {
       setSeeding(false)
     }
