@@ -1,8 +1,18 @@
 // WebSocket sync - No-op stub for Vercel deployment
 // WebSocket requires a persistent server (not available on Vercel serverless)
 
+const noop = () => {}
+const mockSocket = {
+  id: null,
+  connected: false,
+  on: noop,
+  off: noop,
+  emit: noop,
+  once: noop,
+}
+
 export function getSocket() {
-  return null
+  return mockSocket as any
 }
 
 export function disconnectSocket() {
