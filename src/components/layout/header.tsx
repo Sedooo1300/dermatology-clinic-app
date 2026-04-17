@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { motion, AnimatePresence } from 'framer-motion'
+import { GlobalSearch } from '@/components/search/global-search'
 
 const viewTitles: Record<string, string> = {
   dashboard: 'لوحة التحكم',
@@ -93,24 +94,29 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-30 bg-card/80 backdrop-blur-lg border-b border-border">
-      <div className="flex items-center justify-between px-4 h-14">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleSidebar}>
+      <div className="flex items-center justify-between px-4 h-14 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={toggleSidebar}>
             <Menu className="w-5 h-5" />
           </Button>
-          <h2 className="font-bold text-lg text-foreground">
+          <h2 className="font-bold text-lg text-foreground truncate">
             {viewTitles[currentView] || 'لوحة التحكم'}
           </h2>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Global Search */}
+          <div className="hidden sm:block">
+            <GlobalSearch />
+          </div>
+
           {/* Dark mode toggle */}
           {mounted && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="relative"
+              className="relative shrink-0"
             >
               <Sun className="w-5 h-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute w-5 h-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
@@ -118,15 +124,15 @@ export function Header() {
           )}
 
           {/* Connection status */}
-          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${isConnected ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/30' : 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/30'}`}>
+          <div className={`hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full text-xs shrink-0 ${isConnected ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/30' : 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/30'}`}>
             {isConnected ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{isConnected ? 'متصل' : 'غير متصل'}</span>
+            <span className="hidden md:inline">{isConnected ? 'متصل' : 'غير متصل'}</span>
           </div>
 
           {/* Alerts */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
+              <Button variant="ghost" size="icon" className="relative shrink-0">
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
                   <motion.span

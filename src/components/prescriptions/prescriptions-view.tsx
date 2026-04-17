@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,29 +9,17 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogTrigger, DialogFooter, DialogClose,
 } from '@/components/ui/dialog'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pill, Trash2, Printer, Search, Eye, CalendarDays, User, ClipboardList } from 'lucide-react'
+import { Plus, Pill, Trash2, Printer, Search, Eye, CalendarDays, User, ClipboardList, Sparkles, FileText } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+import { cn, formatDate, formatCurrency } from '@/lib/utils'
 
 interface PrescriptionItem {
   id: string
@@ -60,15 +48,125 @@ interface Patient {
   phone?: string | null
 }
 
-const commonMedicines = [
-  'كريم تريتينوين 0.025%', 'كريم تريتينوين 0.05%', 'كريم هيدروكينون 4%',
-  'كريم بانتينول', 'كريم موميتازون', 'كريم بيتاميثازون',
-  'كبسولات دوكسيسايكلين 100mg', 'كبسولات مينوسايكلين',
-  'كبسولات أزيثرومايسين', 'كبسولات إيزوتريتينوين 10mg', 'كبسولات إيزوتريتينوين 20mg',
-  'شامبو كيتوكونازول', 'كريم كيتوكونازول', 'كريم كلوتريمازول',
-  'فيتامين C', 'فيتامين E', 'حمض الفوليك', 'زنك',
-  'كريم واقي شمس SPF50', 'كريم مرطب',
-]
+// Smart Prescription Templates - Dermatology focused
+const PRESCRIPTION_TEMPLATES: Record<string, {
+  label: string
+  color: string
+  diagnosis: string
+  items: Array<{ medicineName: string; dosage: string; frequency: string; duration: string; instructions: string }>
+  notes: string
+}> = {
+  acne_active: {
+    label: 'حب الشباب النشط',
+    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    diagnosis: 'حب الشباب الالتهابي النشط',
+    items: [
+      { medicineName: 'كبسولات دوكسيسايكلين 100mg', dosage: '100mg', frequency: 'مرة يومياً بعد العشاء', duration: '3 أشهر', instructions: 'مع كوب ماء كبير، تجنب التعرض المباشر للشمس' },
+      { medicineName: 'كريم تريتينوين 0.025%', dosage: 'حبة صغيرة على الوجه', frequency: 'مساءً فقط', duration: '3 أشهر', instructions: 'وضع كمية صغيرة جداً على بشرة جافة تماماً، مع واقي شمس نهاراً' },
+      { medicineName: 'غسول بنزويل بيروكسايد 5%', dosage: 'كمية مناسبة', frequency: 'صباحاً ومساءً', duration: '3 أشهر', instructions: 'غسل الوجه بلطف ثم الشطف جيداً بالماء' },
+      { medicineName: 'كريم واقي شمس SPF50', dosage: 'طبقة كافية', frequency: 'صباحاً', duration: 'يومياً (مستمر)', instructions: 'إعادة التطبيق كل ساعتين عند التعرض للشمس' },
+    ],
+    notes: 'متابعة كل شهر لتقييم التحسن وتعديل العلاج حسب الاستجابة. إبلاغ المريض بضرورة استخدام واقي الشمس يومياً',
+  },
+  acne_maintenance: {
+    label: 'حب شباب - متابعة',
+    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    diagnosis: 'حب الشباب - مرحلة المتابعة',
+    items: [
+      { medicineName: 'كريم تريتينوين 0.05%', dosage: 'حبة صغيرة', frequency: 'مساءً', duration: 'مستمر', instructions: 'وضع على بشرة جافة مع تجنب منطقة العين' },
+      { medicineName: 'كريم مرطب خالي من الزيوت', dosage: 'كمية مناسبة', frequency: 'صباحاً ومساءً', duration: 'مستمر', instructions: 'بعد التريتينوين بـ 20 دقيقة' },
+      { medicineName: 'كريم واقي شمس SPF50', dosage: 'طبقة كافية', frequency: 'صباحاً', duration: 'يومياً', instructions: 'حماية من التصبغات الناتجة عن العلاج' },
+    ],
+    notes: 'المتابعة كل 3 أشهر. تقليل التريتينوين إذا حدث جفاف شديد',
+  },
+  hyperpigmentation: {
+    label: 'تصبغات الجلد',
+    color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    diagnosis: 'فرط التصبغ التالي للالتهاب / الكلف / التصبغات',
+    items: [
+      { medicineName: 'كريم هيدروكينون 4%', dosage: 'طبقة رقيقة', frequency: 'مساءً', duration: '2-3 أشهر', instructions: 'على المناطق المصابة فقط، تجنب العين والشفاه' },
+      { medicineName: 'كريم تريتينوين 0.025%', dosage: 'حبة صغيرة', frequency: 'مساءً (قبل الهيدروكينون بـ 20 دقيقة)', duration: '2-3 أشهر', instructions: 'يساعد على تجديد الخلايا وتوحيد اللون' },
+      { medicineName: 'فيتامين C سيروم', dosage: '3-4 قطرات', frequency: 'صباحاً', duration: 'مستمر', instructions: 'يساعد في تفتيح البشرة ومكافحة الأكسدة' },
+      { medicineName: 'كريم واقي شمس SPF50+', dosage: 'طبقة كافية', frequency: 'صباحاً كل ساعتين', duration: 'يومياً', instructions: 'ضروري جداً لمنع تفاقم التصبغات' },
+      { medicineName: 'حمض أزيليك 10%', dosage: 'طبقة رقيقة', frequency: 'صباحاً (تحت الواقي)', duration: '2 أشهر', instructions: 'بديل آمن للهيدروكينون للحوامل' },
+    ],
+    notes: 'مراجعة كل شهر لمراقبة التحسن. التوقف عن الهيدروكينون بعد 3 أشهر واستخدام بدائل آمنة',
+  },
+  eczema: {
+    label: 'أكزيما / التهاب جلد',
+    color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    diagnosis: 'التهاب الجلد التأتبي / الأكزيما',
+    items: [
+      { medicineName: 'كريم موميتازون فوروات 0.1%', dosage: 'طبقة رقيقة', frequency: 'مرة يومياً على المناطق المصابة', duration: 'أسبوعين ثم تقليل تدريجي', instructions: 'لا تستخدم على الوجه أكثر من 5 أيام' },
+      { medicineName: 'مرهم إيمولينت / مرطب طبي', dosage: 'كمية وفيرة', frequency: 'بعد الاستحمام وعند الحاجة', duration: 'مستمر', instructions: 'وضع على بشرة رطبة بعد الاستحمام مباشرة' },
+      { medicineName: 'كريم مضاد هيستامين (يومًا جل)', dosage: 'طبقة رقيقة', frequency: '2-3 مرات عند الحاجة', duration: 'حسب الحاجة', instructions: 'لتخفيف الحكة' },
+      { medicineName: 'دش خفيف (pH متوازن)', dosage: 'استحمام قصير بماء فاتر', frequency: 'يومياً', duration: 'مستمر', instructions: 'تجنب الماء الساخن والصابون القاسي' },
+    ],
+    notes: 'تجنب المحفزات المعروفة. استخدام ملابس قطنية. ترطيب مستمر للجلد',
+  },
+  fungal: {
+    label: 'فطريات جلدية',
+    color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    diagnosis: 'عدوى فطرية جلدية (سعفة / كانتيدا / قدم رياضي)',
+    items: [
+      { medicineName: 'كريم كيتوكونازول 2%', dosage: 'طبقة رقيقة', frequency: 'مرتين يومياً', duration: '2-4 أسابيع', instructions: 'الاستمرار أسبوع بعد زوال الأعراض' },
+      { medicineName: 'كبسولات فلوكونازول 150mg', dosage: '150mg', frequency: 'أسبوعياً', duration: '4-6 أسابيع', instructions: 'مع الوجبة (في الحالات المقاومة)' },
+      { medicineName: 'شامبو كيتوكونازول 2%', dosage: 'كمية مناسبة', frequency: 'مرتين أسبوعياً', duration: '4 أسابيع', instructions: 'في حالة سعفة الرأس: ترك 5 دقائق قبل الشطف' },
+      { medicineName: 'بودرة تالك مضادة للفطريات', dosage: 'كمية مناسبة', frequency: 'صباحاً ومساءً', duration: 'مستمر', instructions: 'للمناطق الرطبة كالأقدام والفخذين' },
+    ],
+    notes: 'مراجعة بعد أسبوعين. الحفاظ على جفاف المنطقة المصابة. تغيير الملابس يومياً',
+  },
+  hair_loss: {
+    label: 'تساقط شعر',
+    color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+    diagnosis: 'تساقط الشعر / الثعلبة',
+    items: [
+      { medicineName: 'مينوكسيديل 5% لوشن', dosage: '1 مل (7 بخات)', frequency: 'مرتين يومياً', duration: '6 أشهر على الأقل', instructions: 'وضع على فروة الرأس الجافة، تدليك بلطف' },
+      { medicineName: 'فيناسترايد 1mg', dosage: 'قرص واحد', frequency: 'يومياً', duration: 'مستمر', instructions: 'للذكور فقط - يمنع تحول التستوستيرون إلى DHT' },
+      { medicineName: 'شامبو كيتوكونازول 2%', dosage: 'كمية مناسبة', frequency: 'مرتين أسبوعياً', duration: 'مستمر', instructions: 'بديل للعلاج الموضعي الداعم' },
+      { medicineName: 'فيتامينات الشعر (بيوتين + زنك)', dosage: 'حبة واحدة', frequency: 'يومياً', duration: '3 أشهر', instructions: 'داعم للشعر والأظافر' },
+    ],
+    notes: 'النتائج تظهر بعد 3-6 أشهر من الاستخدام المنتظم. مراجعة كل شهر',
+  },
+  psoriasis: {
+    label: 'صدفية',
+    color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+    diagnosis: 'الصدفية',
+    items: [
+      { medicineName: 'مرهم كالسيبوتريول 0.005%', dosage: 'طبقة رقيقة', frequency: 'مرتين يومياً', duration: '6-8 أسابيع', instructions: 'لا تتجاوز 100 جرام أسبوعياً' },
+      { medicineName: 'كريم بيتاميثازون دايبروبيونات 0.05%', dosage: 'طبقة رقيقة', frequency: 'مرتين يومياً', duration: 'أسبوعين (بديل)', instructions: 'للمناطق السميكة فقط، تقليل تدريجي' },
+      { medicineName: 'مرطب يوريا 10%', dosage: 'كمية وفيرة', frequency: 'بعد الاستحمام وعند الحاجة', duration: 'مستمر', instructions: 'يساعد في تقشير وترطيب البشرة' },
+      { medicineName: 'دش زيت ساليسيليك', dosage: 'استحمام بماء فاتر', frequency: 'يومياً', duration: 'مستمر', instructions: 'إزالة القشور بلطف' },
+    ],
+    notes: 'تجنب المحفزات (الضغط النفسي، التدخين، بعض الأدوية). متابعة شهرية للتقييم',
+  },
+  anti_aging: {
+    label: 'مكافحة الشيخوخة',
+    color: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+    diagnosis: 'تجديد البشرة / مكافحة الشيخوخة',
+    items: [
+      { medicineName: 'كريم ريتينول 0.3%', dosage: 'حبة صغيرة', frequency: 'مساءً', duration: 'مستمر', instructions: 'البدء بمرتين أسبوعياً ثم زيادة تدريجياً' },
+      { medicineName: 'سيروم فيتامين C 20%', dosage: '3-4 قطرات', frequency: 'صباحاً', duration: 'مستمر', instructions: 'تحفيز الكولاجين ومكافحة الجذور الحرة' },
+      { medicineName: 'كريم هيالورونيك أسيد', dosage: 'كمية مناسبة', frequency: 'صباحاً ومساءً', duration: 'مستمر', instructions: 'ترطيب عميق وتملأ الخطوط الدقيقة' },
+      { medicineName: 'كريم واقي شمس SPF50', dosage: 'طبقة كافية', frequency: 'صباحاً', duration: 'يومياً', instructions: 'أساسي مع أي علاج مضاد للشيخوخة' },
+    ],
+    notes: 'نتائج تدريجية خلال 8-12 أسبوع. تجنب الجمع بين الريتينول والحمض في نفس الوقت',
+  },
+  wound_care: {
+    label: 'عناية بالجروح',
+    color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    diagnosis: 'عناية بالجروح / ما بعد الإجراءات',
+    items: [
+      { medicineName: 'مضاد حيوي موضعي (فوسيدين / ميبو)', dosage: 'طبقة رقيقة', frequency: 'مرتين يومياً بعد التنظيف', duration: '7-10 أيام', instructions: 'تنظيف الجرح بالمحلول الملحي أولاً' },
+      { medicineName: 'ضمادات شاش معقمة', dosage: 'حسب حجم الجرح', frequency: 'تغيير يومياً أو عند البلل', duration: 'حتى الشفاء', instructions: 'تغطية الجرح لمنع التلوث' },
+      { medicineName: 'مسكن ألم (باراسيتامول 500mg)', dosage: 'حبة واحدة', frequency: 'كل 6-8 ساعات عند الحاجة', duration: '5 أيام', instructions: 'الحد الأقصى 4 جرعات يومياً' },
+      { medicineName: 'كريم سيليكون (للندبات)', dosage: 'طبقة رقيقة', frequency: 'مرتين يومياً', duration: '3-6 أشهر', instructions: 'البدء بعد التئام الجرح مباشرة لمنع التندب' },
+    ],
+    notes: 'مراجعة بعد 48 ساعة ثم كل 3 أيام. إبلاغ المريض بعلامات العدوى (احمرار، تورم، ارتفاع حرارة)',
+  },
+}
+
+const commonMedicines = Object.values(PRESCRIPTION_TEMPLATES).flatMap(t => t.items.map(i => i.medicineName)).filter((v, i, a) => a.indexOf(v) === i)
 
 export function PrescriptionsView() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
@@ -77,6 +175,7 @@ export function PrescriptionsView() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [viewingPrescription, setViewingPrescription] = useState<Prescription | null>(null)
+  const [showTemplates, setShowTemplates] = useState(false)
 
   // Form state
   const [formPatientId, setFormPatientId] = useState('')
@@ -87,6 +186,7 @@ export function PrescriptionsView() {
   }>>([{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', quantity: '' }])
 
   const [showMedicineSuggestions, setShowMedicineSuggestions] = useState<number | null>(null)
+  const [diagnosisSuggestions, setDiagnosisSuggestions] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -113,8 +213,18 @@ export function PrescriptionsView() {
   const filteredPrescriptions = prescriptions.filter((p) =>
     p.patient.name.includes(searchQuery) ||
     p.diagnosis?.includes(searchQuery) ||
-    p.notes?.includes(searchQuery)
+    p.notes?.includes(searchQuery) ||
+    p.items.some(i => i.medicineName.includes(searchQuery))
   )
+
+  // Smart diagnosis suggestions
+  const filteredTemplates = useMemo(() => {
+    if (!formDiagnosis.trim()) return Object.entries(PRESCRIPTION_TEMPLATES)
+    const q = formDiagnosis.trim().toLowerCase()
+    return Object.entries(PRESCRIPTION_TEMPLATES).filter(([key, t]) =>
+      key.includes(q) || t.label.includes(q) || t.diagnosis.includes(q)
+    )
+  }, [formDiagnosis])
 
   const addItem = () => {
     setFormItems([...formItems, { medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', quantity: '' }])
@@ -136,12 +246,31 @@ export function PrescriptionsView() {
     setFormDiagnosis('')
     setFormNotes('')
     setFormItems([{ medicineName: '', dosage: '', frequency: '', duration: '', instructions: '', quantity: '' }])
+    setShowTemplates(false)
+  }
+
+  // Auto-fill from template
+  const applyTemplate = (key: string) => {
+    const template = PRESCRIPTION_TEMPLATES[key]
+    if (!template) return
+    setFormDiagnosis(template.diagnosis)
+    setFormNotes(template.notes)
+    setFormItems(template.items.map(item => ({
+      medicineName: item.medicineName,
+      dosage: item.dosage,
+      frequency: item.frequency,
+      duration: item.duration,
+      instructions: item.instructions,
+      quantity: '',
+    })))
+    setShowTemplates(false)
+    toast.success(`تم تطبيق قالب "${template.label}"`)
   }
 
   const handleCreate = async () => {
     const selectedPatient = patients.find((p) => p.id === formPatientId)
     if (!selectedPatient) {
-      toast.error('يرجى اختيار مريض')
+      toast.error('يرجى اختيار المريض')
       return
     }
     if (formItems.every((i) => !i.medicineName.trim())) {
@@ -190,13 +319,13 @@ export function PrescriptionsView() {
   const handlePrint = (prescription: Prescription) => {
     const patient = prescription.patient
     const itemsHtml = prescription.items.map((item, idx) => `
-      <tr style="border-bottom: 1px solid #eee;">
-        <td style="padding: 8px; font-weight: bold; width: 5%;">${idx + 1}</td>
-        <td style="padding: 8px; font-weight: bold;">${item.medicineName}</td>
-        <td style="padding: 8px;">${item.dosage || '-'}</td>
-        <td style="padding: 8px;">${item.frequency || '-'}</td>
-        <td style="padding: 8px;">${item.duration || '-'}</td>
-        <td style="padding: 8px;">${item.instructions || '-'}</td>
+      <tr style="border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 12px 8px; font-weight: bold; width: 5%; text-align: center; background: #f0fdfa;">${idx + 1}</td>
+        <td style="padding: 12px 8px; font-weight: bold; font-size: 13px;">${item.medicineName}</td>
+        <td style="padding: 12px 8px; font-size: 12px; color: #555;">${item.dosage || '-'}</td>
+        <td style="padding: 12px 8px; font-size: 12px; color: #555;">${item.frequency || '-'}</td>
+        <td style="padding: 12px 8px; font-size: 12px; color: #555;">${item.duration || '-'}</td>
+        <td style="padding: 12px 8px; font-size: 11px; color: #666; max-width: 200px;">${item.instructions || '-'}</td>
       </tr>
     `).join('')
 
@@ -208,34 +337,51 @@ export function PrescriptionsView() {
         <head>
           <title>وصفة طبية - ${patient.name}</title>
           <style>
-            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; direction: rtl; }
-            .header { text-align: center; border-bottom: 3px solid #0d9488; padding-bottom: 15px; margin-bottom: 20px; }
-            .header h1 { color: #0d9488; margin: 0; font-size: 24px; }
-            .header p { color: #666; margin: 5px 0 0; }
-            .patient-info { display: flex; justify-content: space-between; background: #f0fdfa; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-            .diagnosis { background: #fef3c7; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th { background: #0d9488; color: white; padding: 10px 8px; text-align: right; }
-            .footer { text-align: center; margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; color: #888; }
-            .notes { background: #f5f5f5; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; }
-            .signature { margin-top: 60px; text-align: left; }
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Cairo', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 30px 20px; direction: rtl; color: #1a1a1a; }
+            .header { text-align: center; border-bottom: 3px solid #0d9488; padding-bottom: 20px; margin-bottom: 25px; position: relative; }
+            .header::after { content: ''; position: absolute; bottom: -6px; right: 0; left: 0; height: 1px; background: #e5e7eb; }
+            .header h1 { color: #0d9488; margin: 0; font-size: 26px; font-weight: 700; }
+            .header .subtitle { color: #666; margin: 5px 0 0; font-size: 14px; }
+            .header .clinic-info { color: #999; font-size: 11px; margin-top: 8px; }
+            .patient-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; background: linear-gradient(135deg, #f0fdfa 0%, #f0f9ff 100%); padding: 18px 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #ccfbf1; }
+            .patient-info .label { font-size: 11px; color: #888; margin-bottom: 3px; }
+            .patient-info .value { font-weight: 600; font-size: 14px; }
+            .diagnosis { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); padding: 14px 20px; border-radius: 12px; margin-bottom: 20px; font-weight: 700; font-size: 15px; border: 1px solid #fde68a; display: flex; align-items: center; gap: 8px; }
+            .diagnosis::before { content: '◎'; color: #f59e0b; font-size: 18px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+            thead th { background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); color: white; padding: 12px 8px; text-align: right; font-size: 12px; font-weight: 600; }
+            tbody tr:hover { background: #f9fafb; }
+            .notes { background: #f8fafc; padding: 14px 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+            .notes .title { font-weight: 700; font-size: 13px; margin-bottom: 5px; color: #475569; }
+            .notes .content { font-size: 12px; color: #64748b; line-height: 1.8; }
+            .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e7eb; }
+            .footer .clinic-name { color: #0d9488; font-weight: 700; font-size: 16px; }
+            .footer .date { color: #999; font-size: 11px; margin-top: 5px; }
+            .signature { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .signature .sig-line { border-bottom: 1px solid #ccc; width: 200px; text-align: center; padding-bottom: 5px; color: #999; font-size: 11px; }
+            .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 80px; color: rgba(13, 148, 136, 0.03); font-weight: bold; pointer-events: none; }
+            @media print { .watermark { display: none; } }
           </style>
         </head>
         <body>
+          <div class="watermark">عيادة المغازى</div>
           <div class="header">
             <h1>عيادة المغازى الجلدية</h1>
-            <p>وصفة طبية</p>
+            <p class="subtitle">وصفة طبية</p>
+            <p class="clinic-info">أمراض جلدية · تجميل · ليزر</p>
           </div>
           <div class="patient-info">
-            <div><strong>المريض:</strong> ${patient.name}</div>
-            ${patient.phone ? `<div><strong>الهاتف:</strong> ${patient.phone}</div>` : ''}
-            <div><strong>التاريخ:</strong> ${new Date(prescription.createdAt).toLocaleDateString('ar-EG')}</div>
+            <div><div class="label">المريض</div><div class="value">${patient.name}</div></div>
+            ${patient.phone ? `<div><div class="label">الهاتف</div><div class="value">${patient.phone}</div></div>` : '<div></div>'}
+            <div><div class="label">التاريخ</div><div class="value">${new Date(prescription.createdAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</div></div>
           </div>
-          ${prescription.diagnosis ? `<div class="diagnosis">التشخيص: ${prescription.diagnosis}</div>` : ''}
+          ${prescription.diagnosis ? `<div class="diagnosis">${prescription.diagnosis}</div>` : ''}
           <table>
             <thead>
               <tr>
-                <th>#</th>
+                <th style="width: 5%; text-align: center;">#</th>
                 <th>الدواء</th>
                 <th>الجرعة</th>
                 <th>التكرار</th>
@@ -245,11 +391,15 @@ export function PrescriptionsView() {
             </thead>
             <tbody>${itemsHtml}</tbody>
           </table>
-          ${prescription.notes ? `<div class="notes"><strong>ملاحظات:</strong> ${prescription.notes}</div>` : ''}
+          ${prescription.notes ? `<div class="notes"><div class="title">ملاحظات وتعليمات</div><div class="content">${prescription.notes}</div></div>` : ''}
           <div class="signature">
-            <p>توقيع الطبيب: _______________</p>
+            <div class="sig-line">توقيع الطبيب</div>
+            <div class="sig-line">ختم العيادة</div>
           </div>
-          <div class="footer">جلسات عيادة المغازى الجلدية</div>
+          <div class="footer">
+            <div class="clinic-name">عيادة المغازى الجلدية</div>
+            <div class="date">تاريخ الإصدار: ${new Date(prescription.createdAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
         </body>
         </html>
       `)
@@ -276,7 +426,10 @@ export function PrescriptionsView() {
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>وصفة طبية جديدة</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                وصفة طبية ذكية
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               {/* Patient Selection */}
@@ -296,15 +449,92 @@ export function PrescriptionsView() {
                 </select>
               </div>
 
-              {/* Diagnosis */}
-              <div>
-                <Label>التشخيص</Label>
+              {/* Smart Diagnosis with Templates */}
+              <div className="relative">
+                <Label className="flex items-center gap-1">
+                  التشخيص
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                </Label>
                 <Input
                   className="mt-1"
-                  placeholder="مثال: حب الشباب الالتهابي"
+                  placeholder="اكتب التشخيص أو اختر من القوالب المقترحة..."
                   value={formDiagnosis}
                   onChange={(e) => setFormDiagnosis(e.target.value)}
+                  onFocus={() => setDiagnosisSuggestions(true)}
+                  onBlur={() => setTimeout(() => setDiagnosisSuggestions(false), 300)}
                 />
+                {diagnosisSuggestions && formDiagnosis.length > 0 && filteredTemplates.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 bg-popover border rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto">
+                    <div className="p-2 border-b">
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> اقتراحات ذكية - اضغط للتطبيق التلقائي
+                      </p>
+                    </div>
+                    {filteredTemplates.map(([key, t]) => (
+                      <button
+                        key={key}
+                        className="w-full text-right px-4 py-3 hover:bg-muted transition-colors border-b last:border-0"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          applyTemplate(key)
+                          setDiagnosisSuggestions(false)
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={cn('text-xs px-2 py-0.5 rounded-full', t.color)}>{t.label}</span>
+                          <span className="text-[10px] text-muted-foreground">{t.items.length} أدوية</span>
+                        </div>
+                        <p className="text-sm font-medium mt-1">{t.diagnosis}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Templates Button */}
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTemplates(!showTemplates)}
+                  className="gap-2 w-full justify-center"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  {showTemplates ? 'إخفاء القوالب' : 'عرض القوالب الجاهزة'}
+                </Button>
+                <AnimatePresence>
+                  {showTemplates && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+                        {Object.entries(PRESCRIPTION_TEMPLATES).map(([key, t]) => (
+                          <motion.button
+                            key={key}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => applyTemplate(key)}
+                            className={cn(
+                              'p-3 rounded-xl border text-right transition-all hover:shadow-md',
+                              'bg-card hover:bg-accent/50',
+                              formDiagnosis === t.diagnosis && 'ring-2 ring-primary/30 border-primary/30'
+                            )}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge className={cn('text-[9px]', t.color)}>{t.label}</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{t.diagnosis}</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">{t.items.length} أدوية</p>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Medicine Items */}
@@ -325,7 +555,9 @@ export function PrescriptionsView() {
                       className="p-3 rounded-xl border bg-muted/30 space-y-2 relative"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">دواء #{index + 1}</span>
+                        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          <Pill className="w-3 h-3" /> دواء #{index + 1}
+                        </span>
                         {formItems.length > 1 && (
                           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeItem(index)}>
                             <Trash2 className="w-3 h-3 text-red-500" />
@@ -380,13 +612,13 @@ export function PrescriptionsView() {
 
               {/* Notes */}
               <div>
-                <Label>ملاحظات</Label>
+                <Label>ملاحظات وارشادات المريض</Label>
                 <Textarea
                   className="mt-1"
-                  placeholder="ملاحظات إضافية للوصفة..."
+                  placeholder="ملاحظات إضافية للوصفة وتعليمات للمريض..."
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
-                  rows={2}
+                  rows={3}
                 />
               </div>
             </div>
@@ -394,7 +626,8 @@ export function PrescriptionsView() {
               <DialogClose asChild>
                 <Button variant="outline">إلغاء</Button>
               </DialogClose>
-              <Button onClick={handleCreate} className="bg-primary text-primary-foreground">
+              <Button onClick={handleCreate} className="bg-primary text-primary-foreground gap-2">
+                <FileText className="w-4 h-4" />
                 حفظ الوصفة
               </Button>
             </DialogFooter>
@@ -406,7 +639,7 @@ export function PrescriptionsView() {
       <div className="relative">
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="بحث بالاسم أو التشخيص..."
+          placeholder="بحث بالاسم أو التشخيص أو اسم الدواء..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pr-9"
@@ -450,11 +683,13 @@ export function PrescriptionsView() {
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                           <CalendarDays className="w-3 h-3" />
                           {new Date(prescription.createdAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                          <span>·</span>
+                          <span>{prescription.items.length} أدوية</span>
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {prescription.items.slice(0, 4).map((item, i) => (
                             <Badge key={i} variant="secondary" className="text-[10px]">
-                              {item.medicineName}
+                              {item.medicineName.length > 20 ? item.medicineName.substring(0, 20) + '...' : item.medicineName}
                               {item.dosage && ` - ${item.dosage}`}
                             </Badge>
                           ))}
