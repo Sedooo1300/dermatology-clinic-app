@@ -26,6 +26,11 @@ model Patient {
   laserProfile  LaserProfile?
   laserSessions LaserSession[]
   laserPackages LaserPackage[]
+
+  // Medical relations
+  prescriptions    Prescription[]
+  diagnoses        Diagnosis[]
+  queueEntries     QueueEntry[]
 }
 
 // أنواع الجلسات
@@ -58,6 +63,8 @@ model Visit {
   patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   sessionType   SessionType? @relation(fields: [sessionTypeId], references: [id], onDelete: SetNull)
   laserTreatments LaserTreatment[]
+  prescriptions    Prescription[]
+  diagnosis        Diagnosis?
 }
 
 // ليزر إزالة الشعر (القديم - للتوافق)
@@ -291,4 +298,75 @@ model LaserRevenue {
   description     String?
   date            DateTime @default(now())
   createdAt       DateTime @default(now())
+}
+
+// ═══════════════════════════════════════
+// ═══ نظام الوصفات الطبية ══════════════
+// ═══════════════════════════════════════
+
+model Prescription {
+  id          String   @id @default(cuid())
+  patientId   String
+  visitId     String?
+  diagnosis   String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visit       Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  items       PrescriptionItem[]
+}
+
+model PrescriptionItem {
+  id              String        @id @default(cuid())
+  prescriptionId  String
+  medicineName    String
+  dosage          String?
+  frequency       String?
+  duration        String?
+  instructions    String?
+  quantity        Int?
+
+  prescription    Prescription  @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+}
+
+// ═══════════════════════════════════════
+// ═══ نظام التشخيصات ══════════════════
+// ═══════════════════════════════════════
+
+model Diagnosis {
+  id          String   @id @default(cuid())
+  patientId   String
+  visitId     String?  @unique
+  condition   String
+  severity    String   @default("mild")
+  bodyArea    String?
+  icdCode     String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visit       Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+}
+
+// ═══════════════════════════════════════
+// ═══ نظام قائمة الانتظار ═════════════
+// ═══════════════════════════════════════
+
+model QueueEntry {
+  id          String   @id @default(cuid())
+  patientId   String
+  patientName String
+  visitType   String?
+  notes       String?
+  status      String   @default("waiting")
+  priority    String   @default("normal")
+  arrivedAt   DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  order       Int      @default(0)
+
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
 }
