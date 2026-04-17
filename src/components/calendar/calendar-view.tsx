@@ -82,15 +82,17 @@ export function CalendarView() {
       const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
 
       const [visitsRes, laserRes] = await Promise.all([
-        fetch(`/api/visits?startDate=${startOfMonth}&endDate=${endOfMonth}&limit=500`),
-        fetch(`/api/laser-v2/sessions?startDate=${startOfMonth}&endDate=${endOfMonth}&limit=500`),
+        fetch(`/api/visits?dateFrom=${startOfMonth}&dateTo=${endOfMonth}&limit=500`),
+        fetch(`/api/laser-v2/sessions?dateFrom=${startOfMonth}&dateTo=${endOfMonth}&limit=500`),
       ])
 
       const visitsData = await visitsRes.json()
       const laserData = await laserRes.json()
 
-      const visits: VisitEvent[] = (visitsData.visits || visitsData || []).map((v: Record<string, unknown>) => ({ ...v, _type: 'visit' as const }))
-      const laserSessions: LaserEvent[] = (laserData.sessions || laserData || []).map((l: Record<string, unknown>) => ({ ...l, _type: 'laser' as const }))
+      const visitsRaw = visitsData.visits || visitsData || []
+      const visits: VisitEvent[] = visitsRaw.map((v: Record<string, unknown>) => ({ ...v, _type: 'visit' as const }))
+      const laserRaw = laserData.sessions || laserData || []
+      const laserSessions: LaserEvent[] = laserRaw.map((l: Record<string, unknown>) => ({ ...l, _type: 'laser' as const }))
 
       setEvents([...visits, ...laserSessions])
     } catch (err) {
