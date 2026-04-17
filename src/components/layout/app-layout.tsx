@@ -17,6 +17,7 @@ import {
   Calendar,
   ClipboardList,
   ListOrdered,
+  MessageCircle,
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -38,6 +39,7 @@ const moreMenuItems = [
   { id: 'alerts', label: 'التنبيهات', icon: Bell, color: 'text-red-500 bg-red-50 dark:bg-red-950/30' },
   { id: 'finance', label: 'المالية', icon: Wallet, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' },
   { id: 'reports', label: 'التقارير', icon: FileBarChart, color: 'text-violet-500 bg-violet-50 dark:bg-violet-950/30' },
+  { id: 'communications', label: 'التواصل', icon: MessageCircle, color: 'text-green-600 bg-green-50 dark:bg-green-950/30' },
   { id: 'settings', label: 'الإعدادات', icon: Settings, color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/30' },
 ]
 
@@ -47,7 +49,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const menuRef = useRef<HTMLDivElement>(null)
 
   const handleNav = (id: string) => {
-    setCurrentView(id as 'dashboard' | 'patients' | 'visits' | 'laser' | 'finance' | 'session-types' | 'alerts' | 'reports' | 'settings' | 'calendar' | 'prescriptions' | 'queue')
+    setCurrentView(id as 'dashboard' | 'patients' | 'visits' | 'laser' | 'finance' | 'session-types' | 'alerts' | 'reports' | 'settings' | 'calendar' | 'prescriptions' | 'queue' | 'communications')
     setSelectedPatientId(null)
     setShowMoreMenu(false)
   }
@@ -73,7 +75,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [showMoreMenu])
 
-  const isMoreSection = ['session-types', 'calendar', 'prescriptions', 'queue', 'alerts', 'finance', 'reports', 'settings'].includes(currentView)
+  const isMoreSection = ['session-types', 'calendar', 'prescriptions', 'queue', 'alerts', 'finance', 'reports', 'communications', 'settings'].includes(currentView)
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

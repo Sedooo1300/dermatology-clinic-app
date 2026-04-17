@@ -15,6 +15,7 @@ export type AppView =
   | 'calendar'
   | 'prescriptions'
   | 'queue'
+  | 'communications'
 
 export type ThemeColor = 'teal' | 'blue' | 'purple' | 'orange' | 'red' | 'green' | 'pink' | 'cyan' | 'lime'
 
@@ -47,6 +48,12 @@ interface AppState {
   // Patient detail sub-tab
   patientDetailTab: string
   setPatientDetailTab: (tab: string) => void
+
+  // Auth
+  currentUser: { id: string; name: string; role: string; token: string } | null
+  isAuthenticated: boolean
+  login: (user: { id: string; name: string; role: string; token: string }) => void
+  logout: () => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -107,11 +114,19 @@ export const useAppStore = create<AppState>()(
       // Patient detail tab
       patientDetailTab: 'visits',
       setPatientDetailTab: (tab) => set({ patientDetailTab: tab }),
+
+      // Auth
+      currentUser: null,
+      isAuthenticated: false,
+      login: (user) => set({ currentUser: user, isAuthenticated: true }),
+      logout: () => set({ currentUser: null, isAuthenticated: false }),
     }),
     {
       name: 'clinic-app-store',
       partialize: (state) => ({
         themeColor: state.themeColor,
+        currentUser: state.currentUser,
+        isAuthenticated: state.isAuthenticated,
       }),
     }
   )

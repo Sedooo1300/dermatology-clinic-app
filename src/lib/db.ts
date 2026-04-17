@@ -355,6 +355,33 @@ CREATE TABLE IF NOT EXISTS "PatientNote" (
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "PatientNote_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "Patient" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS "AppUser" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "role" TEXT NOT NULL DEFAULT 'receptionist',
+  "pin" TEXT NOT NULL,
+  "isActive" BOOLEAN NOT NULL DEFAULT true,
+  "lastLogin" TIMESTAMP,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS "Message" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "patientId" TEXT,
+  "userId" TEXT NOT NULL,
+  "type" TEXT NOT NULL DEFAULT 'whatsapp',
+  "template" TEXT,
+  "content" TEXT NOT NULL,
+  "phone" TEXT,
+  "status" TEXT NOT NULL DEFAULT 'sent',
+  "scheduledAt" TIMESTAMP,
+  "sentAt" TIMESTAMP,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "Message_userId_fkey" FOREIGN KEY ("userId") REFERENCES "AppUser" ("id") ON UPDATE CASCADE,
+  CONSTRAINT "Message_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "Patient" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
 `
 
 export async function setupDatabase(): Promise<{ created: string[]; totalTables: number }> {

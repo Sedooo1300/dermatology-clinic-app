@@ -16,7 +16,9 @@ import { AlertsView } from '@/components/alerts/alerts-view'
 import { CalendarView } from '@/components/calendar/calendar-view'
 import { PrescriptionsView } from '@/components/prescriptions/prescriptions-view'
 import { QueueView } from '@/components/queue/queue-view'
+import { CommunicationsView } from '@/components/communications/communications-view'
 import { ThemeColor } from '@/lib/store'
+import { LoginScreen } from '@/components/auth/login-screen'
 
 const emptySubscribe = () => () => {}
 function useIsMounted() {
@@ -24,7 +26,7 @@ function useIsMounted() {
 }
 
 export default function Home() {
-  const { currentView, themeColor, setThemeColor, sidebarOpen, setSidebarOpen } = useAppStore()
+  const { currentView, themeColor, setThemeColor, sidebarOpen, setSidebarOpen, isAuthenticated, currentUser } = useAppStore()
   const isMounted = useIsMounted()
 
   useEffect(() => {
@@ -69,10 +71,15 @@ export default function Home() {
       case 'calendar': return <CalendarView />
       case 'prescriptions': return <PrescriptionsView />
       case 'queue': return <QueueView />
+      case 'communications': return <CommunicationsView />
       case 'reports': return <ReportsView />
       case 'settings': return <SettingsView />
       default: return <DashboardView />
     }
+  }
+
+  if (!isAuthenticated || !currentUser) {
+    return <LoginScreen />
   }
 
   return <AppLayout>{renderView()}</AppLayout>
