@@ -4,34 +4,47 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+// Support multiple env var names (Vercel Storage uses different names)
+function getDatabaseUrl(): string {
+  return process.env.DATABASE_URL
+    || process.env.STORAGE_URL
+    || process.env.POSTGRES_URL
+    || ''
+}
+
+function getDirectUrl(): string {
+  return process.env.DIRECT_URL
+    || process.env.STORAGE_URL_DIRECT
+    || process.env.STORAGE_URL_NON_POOLING
+    || process.env.POSTGRES_URL_NON_POOLING
+    || ''
+}
+
 function createPrismaClient() {
-  try {
-    return new PrismaClient({
-      log: process.env.NODE_ENV !== 'production' ? ['query'] : [],
-    })
-  } catch (error) {
-    console.error('Failed to create Prisma client:', error)
-    // Return a proxy that gives meaningful errors
-    return new Proxy({} as PrismaClient, {
-      get(_target, prop) {
-        if (prop === '$connect' || prop === '$disconnect' || prop === '$transaction') {
-          return async () => {
-            throw new Error('DATABASE_URL is not configured. Please set DATABASE_URL and DIRECT_URL environment variables in Vercel Dashboard → Settings → Environment Variables')
-          }
-        }
-        // For any model access (db.patient, db.visit, etc.)
-        return new Proxy({}, {
-          get() {
-            return async (..._args: any[]) => {
-              throw new Error('DATABASE_URL is not configured. Please set DATABASE_URL and DIRECT_URL environment variables in Vercel Dashboard → Settings → Environment Variables')
-            }
-          }
-        })
+  const databaseUrl = getDatabaseUrl()
+  const directUrl = getDirectUrl()
+
+  if (!databaseUrl) {
+    console.warn('[DB] No DATABASE_URL found. Available env vars with "URL" or "DB":')
+    Object.keys(process.env).forEach(key => {
+      if (key.includes('URL') || key.includes('DB') || key.includes('DATABASE') || key.includes('POSTGRES')) {
+        console.warn(`  ${key}=${process.env[key]?.substring(0, 30)}...`)
       }
     })
   }
+
+  return new PrismaClient({
+    log: process.env.NODE_ENV !== 'production' ? ['query'] : [],
+    datasources: {
+      db: {
+        url: databaseUrl,
+      },
+    },
+  })
 }
 
 export const db = globalForPrisma.prisma ?? createPrismaClient()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+
+export { getDatabaseUrl, getDirectUrl }

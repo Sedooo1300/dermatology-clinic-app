@@ -265,12 +265,25 @@ CREATE TABLE IF NOT EXISTS "Backup" (
 );
 `
 
+export function getDbUrl(): string {
+  return process.env.DATABASE_URL
+    || process.env.STORAGE_URL
+    || process.env.POSTGRES_URL
+    || ''
+}
+
 export async function GET() {
   try {
-    if (!process.env.DATABASE_URL) {
+    const dbUrl = getDbUrl()
+    if (!dbUrl) {
+      // List available env vars for debugging
+      const available = Object.keys(process.env).filter(k =>
+        k.includes('URL') || k.includes('DB') || k.includes('DATABASE') || k.includes('POSTGRES') || k.includes('STORAGE')
+      )
       return NextResponse.json({
         status: 'no_database',
         message: 'DATABASE_URL is not configured',
+        availableEnvVars: available,
       }, { status: 503 })
     }
 
@@ -302,7 +315,7 @@ export async function GET() {
 
 export async function POST() {
   try {
-    if (!process.env.DATABASE_URL) {
+    if (!getDbUrl()) {
       return NextResponse.json({
         status: 'error',
         message: 'DATABASE_URL is not set',
