@@ -11,11 +11,12 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { Palette, Download, Upload, Trash2, Database, HardDrive, Info, RotateCcw, Sun, Moon } from 'lucide-react'
+import { Palette, Download, Upload, Trash2, Database, HardDrive, Info, RotateCcw, Sun, Moon, FileUp, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { useTheme } from 'next-themes'
 import { Switch } from '@/components/ui/switch'
+import { ImportDialog } from '@/components/import/import-dialog'
 
 const themeOptions: { id: ThemeColor; label: string; color: string; className: string }[] = [
   { id: 'teal', label: 'أخضر مائي', color: 'bg-teal-500', className: '' },
@@ -39,6 +40,7 @@ export function SettingsView() {
   const [backups, setBackups] = useState<Backup[]>([])
   const [backupName, setBackupName] = useState('')
   const [isLoadingBackups, setIsLoadingBackups] = useState(true)
+  const [importOpen, setImportOpen] = useState(false)
 
   useEffect(() => {
     fetchBackups()
@@ -92,17 +94,7 @@ export function SettingsView() {
     }
   }
 
-  const handleImportData = async (file: File) => {
-    try {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      toast.info('تم استيراد البيانات (عرض فقط)')
-      // For a real app, we'd POST each entity to its API
-      console.log('Import data:', data)
-    } catch {
-      toast.error('خطأ في قراءة الملف')
-    }
-  }
+  // Import is now handled by ImportDialog component
 
   const handleSaveBackup = async () => {
     if (!backupName.trim()) {
@@ -258,17 +250,8 @@ export function SettingsView() {
                 <Download className="w-4 h-4" />
                 تصدير البيانات (JSON)
               </Button>
-              <Button variant="outline" className="gap-2 flex-1" onClick={() => {
-                const input = document.createElement('input')
-                input.type = 'file'
-                input.accept = '.json'
-                input.onchange = (e) => {
-                  const file = (e.target as HTMLInputElement).files?.[0]
-                  if (file) handleImportData(file)
-                }
-                input.click()
-              }}>
-                <Upload className="w-4 h-4" />
+              <Button variant="outline" className="gap-2 flex-1" onClick={() => setImportOpen(true)}>
+                <FileUp className="w-4 h-4" />
                 استيراد البيانات
               </Button>
             </div>
@@ -385,6 +368,9 @@ export function SettingsView() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Import Dialog */}
+      <ImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   )
 }
