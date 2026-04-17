@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query, uuid } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
@@ -9,36 +9,51 @@ export async function GET(req: NextRequest) {
     const dateTo = searchParams.get('dateTo') || ''
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = (page - 1) * limit
 
-    const where: Record<string, unknown> = {}
-    if (category) where.category = category
-    if (dateFrom || dateTo) {
-      where.date = {}
-      if (dateFrom) (where.date as Record<string, unknown>).gte = new Date(dateFrom)
-      if (dateTo) (where.date as Record<string, unknown>).lte = new Date(dateTo)
+    const conditions: string[] = []
+    const params: unknown[] = []
+    let paramIndex = 1
+
+    if (category) {
+      conditions.push(`"category" = $${paramIndex}`)
+      params.push(category)
+      paramIndex++
+    }
+    if (dateFrom) {
+      conditions.push(`date >= $${paramIndex}`)
+      params.push(new Date(dateFrom))
+      paramIndex++
+    }
+    if (dateTo) {
+      conditions.push(`date <= $${paramIndex}`)
+      params.push(new Date(dateTo))
+      paramIndex++
     }
 
-    const [revenues, total] = await Promise.all([
-      db.revenue.findMany({
-        where,
-        orderBy: { date: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      db.revenue.count({ where }),
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    const [revenuesResult, totalResult, sumResult] = await Promise.all([
+      query(
+        `SELECT * FROM "Revenue" ${whereClause} ORDER BY date DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...params, limit, offset]
+      ),
+      query(
+        `SELECT COUNT(*)::int as count FROM "Revenue" ${whereClause}`,
+        params
+      ),
+      query(
+        `SELECT COALESCE(SUM(amount), 0)::float as total FROM "Revenue" ${whereClause}`,
+        params
+      ),
     ])
 
-    const sumResult = await db.revenue.aggregate({
-      where,
-      _sum: { amount: true },
-    })
-
     return NextResponse.json({
-      revenues,
-      total,
+      revenues: revenuesResult.rows,
+      total: totalResult.rows[0].count,
       page,
       limit,
-      totalAmount: sumResult._sum.amount || 0,
+      totalAmount: sumResult.rows[0].total,
     })
   } catch (error) {
     console.error('GET /api/revenues error:', error)
@@ -55,17 +70,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'المبلغ مطلوب' }, { status: 400 })
     }
 
-    const revenue = await db.revenue.create({
-      data: {
-        category: category?.trim() || 'sessions',
-        amount: parseFloat(amount),
-        description: description?.trim() || null,
-        date: date ? new Date(date) : new Date(),
-        visitId: visitId || null,
-      },
-    })
+    const id = uuid()
+    const now = new Date()
 
-    return NextResponse.json(revenue, { status: 201 })
+    const result = await query(
+      `INSERT INTO "Revenue" ("id", "category", "amount", "description", "date", "visitId", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        id,
+        category?.trim() || 'sessions',
+        parseFloat(amount),
+        description?.trim() || null,
+        date ? new Date(date) : now,
+        visitId || null,
+        now,
+        now,
+      ]
+    )
+
+    return NextResponse.json(result.rows[0], { status: 201 })
   } catch (error) {
     console.error('POST /api/revenues error:', error)
     return NextResponse.json({ error: 'خطأ في إضافة الإيراد' }, { status: 500 })

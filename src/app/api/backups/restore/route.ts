@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -13,96 +13,76 @@ export async function POST(req: NextRequest) {
 
     // Restore patients
     if (data.patients && Array.isArray(data.patients)) {
-      await db.patient.deleteMany({})
+      await query(`DELETE FROM "Patient"`)
       for (const p of data.patients) {
-        await db.patient.create({
-          data: {
-            id: p.id,
-            name: p.name,
-            phone: p.phone || null,
-            age: p.age || null,
-            gender: p.gender || 'male',
-            notes: p.notes || null,
-            createdAt: new Date(p.createdAt),
-          },
-        })
+        await query(
+          `INSERT INTO "Patient" ("id", "name", "phone", "age", "gender", "notes", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+          [p.id, p.name, p.phone || null, p.age || null, p.gender || 'male', p.notes || null, new Date(p.createdAt)]
+        )
       }
       results.patients = data.patients.length
     }
 
     // Restore session types
     if (data.sessionTypes && Array.isArray(data.sessionTypes)) {
-      await db.sessionType.deleteMany({})
+      await query(`DELETE FROM "SessionType"`)
       for (const st of data.sessionTypes) {
-        await db.sessionType.create({
-          data: {
-            id: st.id,
-            name: st.name,
-            price: st.price || 0,
-            description: st.description || null,
-            isActive: st.isActive !== false,
-            createdAt: new Date(st.createdAt),
-          },
-        })
+        await query(
+          `INSERT INTO "SessionType" ("id", "name", "price", "description", "isActive", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [st.id, st.name, st.price || 0, st.description || null, st.isActive !== false, new Date(st.createdAt)]
+        )
       }
       results.sessionTypes = data.sessionTypes.length
     }
 
     // Restore visits
     if (data.visits && Array.isArray(data.visits)) {
-      await db.visit.deleteMany({})
+      await query(`DELETE FROM "Visit"`)
       for (const v of data.visits) {
-        await db.visit.create({
-          data: {
-            id: v.id,
-            patientId: v.patientId,
-            sessionTypeId: v.sessionTypeId || null,
-            date: new Date(v.date),
-            price: v.price || 0,
-            paid: v.paid || 0,
-            remaining: v.remaining || 0,
-            notes: v.notes || null,
-            status: v.status || 'completed',
-            createdAt: new Date(v.createdAt),
-          },
-        })
+        await query(
+          `INSERT INTO "Visit" ("id", "patientId", "sessionTypeId", "date", "price", "paid", "remaining", "notes", "status", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
+          [
+            v.id,
+            v.patientId,
+            v.sessionTypeId || null,
+            new Date(v.date),
+            v.price || 0,
+            v.paid || 0,
+            v.remaining || 0,
+            v.notes || null,
+            v.status || 'completed',
+            new Date(v.createdAt),
+          ]
+        )
       }
       results.visits = data.visits.length
     }
 
     // Restore expenses
     if (data.expenses && Array.isArray(data.expenses)) {
-      await db.expense.deleteMany({})
+      await query(`DELETE FROM "Expense"`)
       for (const e of data.expenses) {
-        await db.expense.create({
-          data: {
-            id: e.id,
-            category: e.category,
-            amount: e.amount,
-            description: e.description || null,
-            date: new Date(e.date),
-            createdAt: new Date(e.createdAt),
-          },
-        })
+        await query(
+          `INSERT INTO "Expense" ("id", "category", "amount", "description", "date", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [e.id, e.category, e.amount, e.description || null, new Date(e.date), new Date(e.createdAt)]
+        )
       }
       results.expenses = data.expenses.length
     }
 
     // Restore revenues
     if (data.revenues && Array.isArray(data.revenues)) {
-      await db.revenue.deleteMany({})
+      await query(`DELETE FROM "Revenue"`)
       for (const r of data.revenues) {
-        await db.revenue.create({
-          data: {
-            id: r.id,
-            category: r.category || 'sessions',
-            amount: r.amount,
-            description: r.description || null,
-            date: new Date(r.date),
-            visitId: r.visitId || null,
-            createdAt: new Date(r.createdAt),
-          },
-        })
+        await query(
+          `INSERT INTO "Revenue" ("id", "category", "amount", "description", "date", "visitId", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+          [r.id, r.category || 'sessions', r.amount, r.description || null, new Date(r.date), r.visitId || null, new Date(r.createdAt)]
+        )
       }
       results.revenues = data.revenues.length
     }

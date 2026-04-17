@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function PUT(
@@ -14,27 +14,75 @@ export async function PUT(
       progress, sessionsDone, sessionsTotal, nextSessionDate, notes,
     } = body
 
-    const treatment = await db.laserTreatment.update({
-      where: { id },
-      data: {
-        area: area || undefined,
-        skinType: skinType || null,
-        hairColor: hairColor || null,
-        skinSensitivity: skinSensitivity || null,
-        fluence: fluence || null,
-        pulseWidth: pulseWidth || null,
-        spotSize: spotSize || null,
-        coolingType: coolingType || null,
-        painLevel: painLevel ? parseInt(painLevel) : null,
-        progress: progress || null,
-        sessionsDone: sessionsDone !== undefined ? parseInt(sessionsDone) : undefined,
-        sessionsTotal: sessionsTotal !== undefined ? parseInt(sessionsTotal) : undefined,
-        nextSessionDate: nextSessionDate ? new Date(nextSessionDate) : null,
-        notes: notes?.trim() || null,
-      },
-    })
+    const setClauses: string[] = [`"updatedAt" = CURRENT_TIMESTAMP`]
+    const params: unknown[] = []
 
-    return NextResponse.json(treatment)
+    if (area !== undefined) {
+      setClauses.push(`"area" = $${params.length + 1}`)
+      params.push(area)
+    }
+    if (skinType !== undefined) {
+      setClauses.push(`"skinType" = $${params.length + 1}`)
+      params.push(skinType || null)
+    }
+    if (hairColor !== undefined) {
+      setClauses.push(`"hairColor" = $${params.length + 1}`)
+      params.push(hairColor || null)
+    }
+    if (skinSensitivity !== undefined) {
+      setClauses.push(`"skinSensitivity" = $${params.length + 1}`)
+      params.push(skinSensitivity || null)
+    }
+    if (fluence !== undefined) {
+      setClauses.push(`"fluence" = $${params.length + 1}`)
+      params.push(fluence ? String(fluence) : null)
+    }
+    if (pulseWidth !== undefined) {
+      setClauses.push(`"pulseWidth" = $${params.length + 1}`)
+      params.push(pulseWidth ? String(pulseWidth) : null)
+    }
+    if (spotSize !== undefined) {
+      setClauses.push(`"spotSize" = $${params.length + 1}`)
+      params.push(spotSize ? String(spotSize) : null)
+    }
+    if (coolingType !== undefined) {
+      setClauses.push(`"coolingType" = $${params.length + 1}`)
+      params.push(coolingType || null)
+    }
+    if (painLevel !== undefined) {
+      setClauses.push(`"painLevel" = $${params.length + 1}`)
+      params.push(painLevel ? parseInt(painLevel) : null)
+    }
+    if (progress !== undefined) {
+      setClauses.push(`"progress" = $${params.length + 1}`)
+      params.push(progress || null)
+    }
+    if (sessionsDone !== undefined) {
+      setClauses.push(`"sessionsDone" = $${params.length + 1}`)
+      params.push(sessionsDone !== undefined ? parseInt(sessionsDone) : 0)
+    }
+    if (sessionsTotal !== undefined) {
+      setClauses.push(`"sessionsTotal" = $${params.length + 1}`)
+      params.push(sessionsTotal !== undefined ? parseInt(sessionsTotal) : 0)
+    }
+    if (nextSessionDate !== undefined) {
+      setClauses.push(`"nextSessionDate" = $${params.length + 1}`)
+      params.push(nextSessionDate ? new Date(nextSessionDate) : null)
+    }
+    if (notes !== undefined) {
+      setClauses.push(`"notes" = $${params.length + 1}`)
+      params.push(notes?.trim() || null)
+    }
+
+    params.push(id)
+    const sql = `UPDATE "LaserTreatment" SET ${setClauses.join(', ')} WHERE "id" = $${params.length} RETURNING *`
+    const { rows } = await query(sql, params)
+
+    if (!rows[0]) {
+      return NextResponse.json({ error: 'جلسة الليزر غير موجودة' }, { status: 404 })
+    }
+
+    return NextResponse.json(rows[0])
   } catch (error) {
     console.error('PUT /api/laser/[id] error:', error)
     return NextResponse.json({ error: 'خطأ في تعديل جلسة الليزر' }, { status: 500 })
@@ -47,7 +95,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await db.laserTreatment.delete({ where: { id } })
+    await query(`DELETE FROM "LaserTreatment" WHERE "id" = $1`, [id])
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE /api/laser/[id] error:', error)

@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query, uuid } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
@@ -8,23 +8,30 @@ export async function GET(req: NextRequest) {
     const dateTo = searchParams.get('dateTo') || ''
     const patientId = searchParams.get('patientId') || ''
 
-    const where: Record<string, unknown> = {}
-    if (patientId) where.patientId = patientId
+    const conditions: string[] = []
+    const params: unknown[] = []
 
-    if (dateFrom || dateTo) {
-      where.date = {}
-      if (dateFrom) (where.date as Record<string, unknown>).gte = new Date(dateFrom)
-      if (dateTo) (where.date as Record<string, unknown>).lte = new Date(dateTo + 'T23:59:59')
+    if (patientId) {
+      conditions.push(`"patientId" = $${params.length + 1}`)
+      params.push(patientId)
+    }
+    if (dateFrom) {
+      conditions.push(`"date" >= $${params.length + 1}`)
+      params.push(new Date(dateFrom))
+    }
+    if (dateTo) {
+      conditions.push(`"date" <= $${params.length + 1}`)
+      params.push(new Date(dateTo + 'T23:59:59'))
     }
 
-    const revenues = await db.laserRevenue.findMany({
-      where,
-      orderBy: { date: 'desc' },
-    })
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
-    const totalAmount = revenues.reduce((sum: number, r: { amount: number }) => sum + r.amount, 0)
+    const sql = `SELECT * FROM "LaserRevenue" ${where} ORDER BY "date" DESC`
+    const { rows } = await query(sql, params)
 
-    return NextResponse.json({ revenues, totalAmount })
+    const totalAmount = rows.reduce((sum: number, r: Record<string, unknown>) => sum + Number(r.amount), 0)
+
+    return NextResponse.json({ revenues: rows, totalAmount })
   } catch (error) {
     console.error('GET /api/laser-v2/revenue error:', error)
     return NextResponse.json({ error: 'خطأ في جلب البيانات' }, { status: 500 })
@@ -40,19 +47,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'المبلغ مطلوب ويجب أن يكون أكبر من صفر' }, { status: 400 })
     }
 
-    const revenue = await db.laserRevenue.create({
-      data: {
-        patientId: patientId || null,
-        sessionId: sessionId || null,
-        packageId: packageId || null,
-        type: type || 'extra',
-        amount: parseFloat(amount),
-        description: description?.trim() || null,
-        date: date ? new Date(date) : new Date(),
-      },
-    })
+    const id = uuid()
+    const sql = `
+      INSERT INTO "LaserRevenue" ("id", "patientId", "sessionId", "packageId", "type", "amount", "description", "date")
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *
+    `
+    const { rows } = await query(sql, [
+      id,
+      patientId || null,
+      sessionId || null,
+      packageId || null,
+      type || 'extra',
+      parseFloat(amount),
+      description?.trim() || null,
+      date ? new Date(date) : new Date(),
+    ])
 
-    return NextResponse.json(revenue, { status: 201 })
+    return NextResponse.json(rows[0], { status: 201 })
   } catch (error) {
     console.error('POST /api/laser-v2/revenue error:', error)
     return NextResponse.json({ error: 'خطأ في إضافة الإيراد' }, { status: 500 })

@@ -1,6 +1,6 @@
-import { db } from '@/lib/db'
+import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths, format } from 'date-fns'
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, format } from 'date-fns'
 
 export async function GET(req: NextRequest) {
   try {
@@ -33,36 +33,55 @@ export async function GET(req: NextRequest) {
 
     switch (type) {
       case 'visits': {
-        const visits = await db.visit.findMany({
-          where: { date: { gte: dateFrom, lte: dateTo } },
-          include: { patient: { select: { name: true } }, sessionType: { select: { name: true } } },
-          orderBy: { date: 'desc' },
-        })
+        const visitsResult = await query(
+          `SELECT v.*,
+            json_build_object('name', "patient"."name") AS "patient",
+            json_build_object('name', "st"."name") AS "sessionType"
+           FROM "Visit" v
+           LEFT JOIN "Patient" "patient" ON "patient"."id" = v."patientId"
+           LEFT JOIN "SessionType" "st" ON "st"."id" = v."sessionTypeId"
+           WHERE v."date" >= $1 AND v."date" <= $2
+           ORDER BY v."date" DESC`,
+          [dateFrom, dateTo]
+        )
+        const visits = visitsResult.rows
         const completed = visits.filter((v) => v.status === 'completed')
         const cancelled = visits.filter((v) => v.status === 'cancelled')
         const scheduled = visits.filter((v) => v.status === 'scheduled')
-        const totalRevenue = completed.reduce((s, v) => s + v.paid, 0)
+        const totalRevenue = completed.reduce((s, v) => s + Number(v.paid), 0)
         data = { visits, completed, cancelled, scheduled, totalRevenue, period, dateFrom, dateTo }
         break
       }
       case 'finance': {
-        const expenses = await db.expense.findMany({
-          where: { date: { gte: dateFrom, lte: dateTo } },
-        })
-        const revenues = await db.revenue.findMany({
-          where: { date: { gte: dateFrom, lte: dateTo } },
-        })
-        const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0)
-        const totalRevenues = revenues.reduce((s, r) => s + r.amount, 0)
+        const expensesResult = await query(
+          `SELECT * FROM "Expense" WHERE "date" >= $1 AND "date" <= $2`,
+          [dateFrom, dateTo]
+        )
+        const revenuesResult = await query(
+          `SELECT * FROM "Revenue" WHERE "date" >= $1 AND "date" <= $2`,
+          [dateFrom, dateTo]
+        )
+        const expenses = expensesResult.rows
+        const revenues = revenuesResult.rows
+        const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0)
+        const totalRevenues = revenues.reduce((s, r) => s + Number(r.amount), 0)
         data = { expenses, revenues, totalExpenses, totalRevenues, netProfit: totalRevenues - totalExpenses, period, dateFrom, dateTo }
         break
       }
       case 'laser': {
-        const laserTreatments = await db.laserTreatment.findMany({
-          where: { createdAt: { gte: dateFrom, lte: dateTo } },
-          include: { visit: { include: { patient: { select: { name: true } } } } },
-          orderBy: { createdAt: 'desc' },
-        })
+        const treatmentsResult = await query(
+          `SELECT lt.*,
+            json_build_object(
+              'patient', json_build_object('name', "patient"."name")
+            ) AS "visit"
+           FROM "LaserTreatment" lt
+           LEFT JOIN "Visit" v ON v."id" = lt."visitId"
+           LEFT JOIN "Patient" "patient" ON "patient"."id" = v."patientId"
+           WHERE lt."createdAt" >= $1 AND lt."createdAt" <= $2
+           ORDER BY lt."createdAt" DESC`,
+          [dateFrom, dateTo]
+        )
+        const laserTreatments = treatmentsResult.rows
         const areas = laserTreatments.reduce((acc, t) => {
           acc[t.area] = (acc[t.area] || 0) + 1
           return acc
@@ -71,11 +90,19 @@ export async function GET(req: NextRequest) {
         break
       }
       case 'patients': {
-        const patients = await db.patient.findMany({
-          include: { _count: { select: { visits: true } } },
-          orderBy: { createdAt: 'desc' },
-        })
-        const newPatients = patients.filter((p) => p.createdAt >= dateFrom && p.createdAt <= dateTo)
+        const patientsResult = await query(
+          `SELECT p.*, COUNT(v."id")::int AS "_count_visits"
+           FROM "Patient" p
+           LEFT JOIN "Visit" v ON v."patientId" = p."id"
+           GROUP BY p."id"
+           ORDER BY p."createdAt" DESC`,
+          []
+        )
+        const patients = patientsResult.rows.map((p) => ({
+          ...p,
+          _count: { visits: p._count_visits },
+        }))
+        const newPatients = patients.filter((p) => new Date(p.createdAt) >= dateFrom && new Date(p.createdAt) <= dateTo)
         data = { patients, newPatients, total: patients.length, newThisPeriod: newPatients.length, period, dateFrom, dateTo }
         break
       }
@@ -84,6 +111,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data)
   } catch (error) {
     console.error('GET /api/reports error:', error)
-    return NextResponse.json({ error: 'خطأ في جلب التقرير' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch report' }, { status: 500 })
   }
 }

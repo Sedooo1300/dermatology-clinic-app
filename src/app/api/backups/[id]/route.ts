@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function DELETE(
@@ -7,10 +7,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await db.backup.delete({ where: { id } })
+    await query(`DELETE FROM "Backup" WHERE "id" = $1`, [id])
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE /api/backups/[id] error:', error)
-    return NextResponse.json({ error: 'خطأ في حذف النسخة الاحتياطية' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to delete backup' }, { status: 500 })
   }
 }

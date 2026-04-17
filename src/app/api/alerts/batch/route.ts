@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function PUT(req: NextRequest) {
@@ -7,10 +7,10 @@ export async function PUT(req: NextRequest) {
     const { action } = body
 
     if (action === 'markAllRead') {
-      await db.alert.updateMany({
-        where: { isRead: false },
-        data: { isRead: true },
-      })
+      await query(
+        `UPDATE "Alert" SET "isRead" = true, "updatedAt" = $1 WHERE "isRead" = false`,
+        [new Date()]
+      )
       return NextResponse.json({ success: true, message: 'تم تحديد الكل كمقروء' })
     }
 

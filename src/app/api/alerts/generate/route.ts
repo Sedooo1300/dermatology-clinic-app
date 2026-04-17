@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query, queryOne, uuid } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function POST() {
@@ -10,201 +10,245 @@ export async function POST() {
     let created = 0
 
     // 1. Upcoming appointments (scheduled visits in next 3 days)
-    const upcomingVisits = await db.visit.findMany({
-      where: {
-        date: { gte: startOfDay, lte: in3Days },
-        status: 'scheduled',
-      },
-      include: {
-        patient: { select: { id: true, name: true } },
-        sessionType: { select: { name: true } },
-      },
-    })
+    const upcomingVisits = await query<{
+      id: string
+      patientId: string
+      date: string
+      patientName: string | null
+      sessionTypeName: string | null
+    }>(
+      `SELECT v.id, v."patientId", v."date", p.name as "patientName", st.name as "sessionTypeName"
+      FROM "Visit" v
+      LEFT JOIN "Patient" p ON v."patientId" = p.id
+      LEFT JOIN "SessionType" st ON v."sessionTypeId" = st.id
+      WHERE v."date" >= $1 AND v."date" <= $2 AND v.status = 'scheduled'`,
+      [startOfDay, in3Days]
+    )
 
-    for (const visit of upcomingVisits) {
+    for (const visit of upcomingVisits.rows) {
       // Check if alert already exists for this visit
-      const existing = await db.alert.findFirst({
-        where: {
-          type: 'appointment',
-          patientId: visit.patientId,
-          message: { contains: visit.id },
-        },
-      })
+      const existing = await queryOne<{ id: string }>(
+        `SELECT id FROM "Alert" WHERE type = 'appointment' AND "patientId" = $1 AND message LIKE $2`,
+        [visit.patientId, `%${visit.id}%`]
+      )
       if (!existing) {
-        const daysUntil = Math.ceil((visit.date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        const daysUntil = Math.ceil((new Date(visit.date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
         const priority = daysUntil === 0 ? 'urgent' : daysUntil === 1 ? 'high' : 'normal'
-        await db.alert.create({
-          data: {
-            patientId: visit.patientId,
-            title: `موعد جلسة ${visit.sessionType?.name || ''}`,
-            message: `لديك موعد جلسة ${visit.sessionType?.name || ''} للمريض ${visit.patient.name} ${daysUntil === 0 ? 'اليوم' : `بعد ${daysUntil} يوم`} - كود الجلسة: ${visit.id}`,
-            type: 'appointment',
+        await query(
+          `INSERT INTO "Alert" (id, "patientId", title, message, type, priority, date, "isRead", "createdAt", "updatedAt")
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+          [
+            uuid(),
+            visit.patientId,
+            `موعد جلسة ${visit.sessionTypeName || ''}`,
+            `لديك موعد جلسة ${visit.sessionTypeName || ''} للمريض ${visit.patientName || ''} ${daysUntil === 0 ? 'اليوم' : `بعد ${daysUntil} يوم`} - كود الجلسة: ${visit.id}`,
+            'appointment',
             priority,
-            date: visit.date,
-            isRead: false,
-          },
-        })
+            new Date(visit.date),
+            false,
+            now,
+          ]
+        )
         created++
       }
     }
 
     // 2. Overdue payments
-    const overdueVisits = await db.visit.findMany({
-      where: { remaining: { gt: 0 } },
-      include: { patient: { select: { id: true, name: true } } },
-      take: 10,
-    })
+    const overdueVisits = await query<{
+      id: string
+      patientId: string
+      remaining: number
+      patientName: string | null
+    }>(
+      `SELECT v.id, v."patientId", v."remaining", p.name as "patientName"
+      FROM "Visit" v
+      LEFT JOIN "Patient" p ON v."patientId" = p.id
+      WHERE v."remaining" > 0
+      LIMIT 10`
+    )
 
-    for (const visit of overdueVisits) {
-      const existing = await db.alert.findFirst({
-        where: {
-          type: 'payment',
-          patientId: visit.patientId,
-          message: { contains: visit.id },
-          createdAt: { gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
-        },
-      })
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+    for (const visit of overdueVisits.rows) {
+      const existing = await queryOne<{ id: string }>(
+        `SELECT id FROM "Alert" WHERE type = 'payment' AND "patientId" = $1 AND message LIKE $2 AND "createdAt" >= $3`,
+        [visit.patientId, `%${visit.id}%`, sevenDaysAgo]
+      )
       if (!existing) {
-        await db.alert.create({
-          data: {
-            patientId: visit.patientId,
-            title: `مستحقات مالية - ${visit.patient.name}`,
-            message: `المريض ${visit.patient.name} عليه مستحقات مالية متأخرة بقيمة ${visit.remaining} ج.م - كود الزيارة: ${visit.id}`,
-            type: 'payment',
-            priority: visit.remaining > 500 ? 'high' : 'normal',
-            date: now,
-            isRead: false,
-          },
-        })
+        await query(
+          `INSERT INTO "Alert" (id, "patientId", title, message, type, priority, date, "isRead", "createdAt", "updatedAt")
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+          [
+            uuid(),
+            visit.patientId,
+            `مستحقات مالية - ${visit.patientName || ''}`,
+            `المريض ${visit.patientName || ''} عليه مستحقات مالية متأخرة بقيمة ${visit.remaining} ج.م - كود الزيارة: ${visit.id}`,
+            'payment',
+            visit.remaining > 500 ? 'high' : 'normal',
+            now,
+            false,
+            now,
+          ]
+        )
         created++
       }
     }
 
-    // 3. Laser packages near completion
+    // 3. Laser packages near completion and expiring packages
     try {
-      const nearCompletionPkgs = await db.laserPackage.findMany({
-        where: {
-          status: 'active',
-          remainingSessions: { lte: 2, gt: 0 },
-        },
-        include: {
-          patient: { select: { id: true, name: true } },
-          area: { select: { name: true } },
-        },
-      })
+      const nearCompletionPkgs = await query<{
+        id: string
+        patientId: string
+        name: string
+        remainingSessions: number
+        paid: number
+        totalPrice: number
+        patientName: string | null
+        areaName: string | null
+      }>(
+        `SELECT lp.id, lp."patientId", lp.name, lp."remainingSessions", lp."paid", lp."totalPrice",
+          p.name as "patientName", la.name as "areaName"
+        FROM "LaserPackage" lp
+        LEFT JOIN "Patient" p ON lp."patientId" = p.id
+        LEFT JOIN "LaserArea" la ON lp."areaId" = la.id
+        WHERE lp.status = 'active' AND lp."remainingSessions" <= 2 AND lp."remainingSessions" > 0`
+      )
 
-      for (const pkg of nearCompletionPkgs) {
-        const existing = await db.alert.findFirst({
-          where: {
-            type: 'package',
-            patientId: pkg.patientId,
-            message: { contains: pkg.id },
-            createdAt: { gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
-          },
-        })
+      for (const pkg of nearCompletionPkgs.rows) {
+        const existing = await queryOne<{ id: string }>(
+          `SELECT id FROM "Alert" WHERE type = 'package' AND "patientId" = $1 AND message LIKE $2 AND "createdAt" >= $3`,
+          [pkg.patientId, `%${pkg.id}%`, sevenDaysAgo]
+        )
         if (!existing) {
-          await db.alert.create({
-            data: {
-              patientId: pkg.patientId,
-              title: `باقة على وشك الانتهاء - ${pkg.patient.name}`,
-              message: `باقة "${pkg.name}" للمريض ${pkg.patient.name} متبقي ${pkg.remainingSessions} جلسة فقط (${pkg.area?.name || ''}) - إجمالي المدفوع: ${pkg.paid}/${pkg.totalPrice} ج.م`,
-              type: 'package',
-              priority: pkg.remainingSessions === 1 ? 'high' : 'normal',
-              date: now,
-              isRead: false,
-            },
-          })
+          await query(
+            `INSERT INTO "Alert" (id, "patientId", title, message, type, priority, date, "isRead", "createdAt", "updatedAt")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+            [
+              uuid(),
+              pkg.patientId,
+              `باقة على وشك الانتهاء - ${pkg.patientName || ''}`,
+              `باقة "${pkg.name}" للمريض ${pkg.patientName || ''} متبقي ${pkg.remainingSessions} جلسة فقط (${pkg.areaName || ''}) - إجمالي المدفوع: ${pkg.paid}/${pkg.totalPrice} ج.م`,
+              'package',
+              pkg.remainingSessions === 1 ? 'high' : 'normal',
+              now,
+              false,
+              now,
+            ]
+          )
           created++
         }
       }
 
       // Expiring packages
-      const expiringPkgs = await db.laserPackage.findMany({
-        where: {
-          status: 'active',
-          expiryDate: { lte: in7Days, gte: startOfDay },
-        },
-        include: {
-          patient: { select: { id: true, name: true } },
-          area: { select: { name: true } },
-        },
-      })
+      const expiringPkgs = await query<{
+        id: string
+        patientId: string
+        name: string
+        remainingSessions: number
+        patientName: string | null
+        areaName: string | null
+      }>(
+        `SELECT lp.id, lp."patientId", lp.name, lp."remainingSessions",
+          p.name as "patientName", la.name as "areaName"
+        FROM "LaserPackage" lp
+        LEFT JOIN "Patient" p ON lp."patientId" = p.id
+        LEFT JOIN "LaserArea" la ON lp."areaId" = la.id
+        WHERE lp.status = 'active' AND lp."expiryDate" >= $1 AND lp."expiryDate" <= $2`,
+        [startOfDay, in7Days]
+      )
 
-      for (const pkg of expiringPkgs) {
-        const existing = await db.alert.findFirst({
-          where: {
-            type: 'package',
-            patientId: pkg.patientId,
-            message: { contains: 'تنتهي صلاحية' },
-            createdAt: { gte: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) },
-          },
-        })
+      const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+
+      for (const pkg of expiringPkgs.rows) {
+        const existing = await queryOne<{ id: string }>(
+          `SELECT id FROM "Alert" WHERE type = 'package' AND "patientId" = $1 AND message LIKE '%تنتهي صلاحية%' AND "createdAt" >= $2`,
+          [pkg.patientId, threeDaysAgo]
+        )
         if (!existing) {
-          await db.alert.create({
-            data: {
-              patientId: pkg.patientId,
-              title: `باقة تنتهي قريباً - ${pkg.patient.name}`,
-              message: `باقة "${pkg.name}" للمريض ${pkg.patient.name} ({pkg.area?.name || ''}) تنتهي صلاحيتها قريباً ومتبقي ${pkg.remainingSessions} جلسة - يرجى تنبيه المريض`,
-              type: 'package',
-              priority: 'high',
-              date: now,
-              isRead: false,
-            },
-          })
+          await query(
+            `INSERT INTO "Alert" (id, "patientId", title, message, type, priority, date, "isRead", "createdAt", "updatedAt")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+            [
+              uuid(),
+              pkg.patientId,
+              `باقة تنتهي قريباً - ${pkg.patientName || ''}`,
+              `باقة "${pkg.name}" للمريض ${pkg.patientName || ''} (${pkg.areaName || ''}) تنتهي صلاحيتها قريباً ومتبقي ${pkg.remainingSessions} جلسة - يرجى تنبيه المريض`,
+              'package',
+              'high',
+              now,
+              false,
+              now,
+            ]
+          )
           created++
         }
       }
-    } catch { /* laser tables might not exist */ }
+    } catch {
+      // laser tables might not exist
+    }
 
-    // 4. Follow-up needed (recent completed visits that may need follow-up)
-    const followUpVisits = await db.visit.findMany({
-      where: {
-        status: 'completed',
-        date: { gte: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000) },
-      },
-      include: { patient: { select: { id: true, name: true } } },
-      take: 5,
-      orderBy: { date: 'desc' },
-    })
+    // 4. Follow-up needed (recent completed visits)
+    const fortyFiveDaysAgo = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000)
 
-    for (const visit of followUpVisits) {
-      const existing = await db.alert.findFirst({
-        where: {
-          type: 'followup',
-          patientId: visit.patientId,
-          message: { contains: visit.id },
-          createdAt: { gte: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) },
-        },
-      })
+    const followUpVisits = await query<{
+      id: string
+      patientId: string
+      patientName: string | null
+    }>(
+      `SELECT v.id, v."patientId", p.name as "patientName"
+      FROM "Visit" v
+      LEFT JOIN "Patient" p ON v."patientId" = p.id
+      WHERE v.status = 'completed' AND v."date" >= $1
+      ORDER BY v."date" DESC
+      LIMIT 5`,
+      [fortyFiveDaysAgo]
+    )
+
+    for (const visit of followUpVisits.rows) {
+      const existing = await queryOne<{ id: string }>(
+        `SELECT id FROM "Alert" WHERE type = 'followup' AND "patientId" = $1 AND message LIKE $2 AND "createdAt" >= $3`,
+        [visit.patientId, `%${visit.id}%`, threeDaysAgo]
+      )
       if (!existing) {
-        await db.alert.create({
-          data: {
-            patientId: visit.patientId,
-            title: `متابعة مطلوبة - ${visit.patient.name}`,
-            message: `المريض ${visit.patient.name} لديه موعد متابعة قادم - يرجى التواصل لتأكيد الموعد`,
-            type: 'followup',
-            priority: 'normal',
-            date: now,
-            isRead: false,
-          },
-        })
+        await query(
+          `INSERT INTO "Alert" (id, "patientId", title, message, type, priority, date, "isRead", "createdAt", "updatedAt")
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+          [
+            uuid(),
+            visit.patientId,
+            `متابعة مطلوبة - ${visit.patientName || ''}`,
+            `المريض ${visit.patientName || ''} لديه موعد متابعة قادم - يرجى التواصل لتأكيد الموعد`,
+            'followup',
+            'normal',
+            now,
+            false,
+            now,
+          ]
+        )
         created++
       }
     }
 
     // 5. System alert if no alerts exist
-    const totalAlerts = await db.alert.count()
+    const totalAlertsRes = await query<{ count: number }>(
+      `SELECT COUNT(*)::int as count FROM "Alert"`
+    )
+    const totalAlerts = totalAlertsRes.rows[0]?.count ?? 0
     if (totalAlerts === 0 && created === 0) {
-      await db.alert.create({
-        data: {
-          title: 'مرحباً بك في نظام التنبيهات',
-          message: 'هذا هو أول تنبيه في النظام. يمكنك إنشاء تنبيهات ذكية من زر "تنبيهات ذكية" أو إنشاء تنبيه مخصص يدوياً. النظام سيقوم تلقائياً بإنشاء تنبيهات للمواعيد القادمة والمستحقات المالية وباقات الليزر.',
-          type: 'system',
-          priority: 'low',
-          date: now,
-          isRead: false,
-        },
-      })
+      await query(
+        `INSERT INTO "Alert" (id, title, message, type, priority, date, "isRead", "createdAt", "updatedAt")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+        [
+          uuid(),
+          'مرحباً بك في نظام التنبيهات',
+          'هذا هو أول تنبيه في النظام. يمكنك إنشاء تنبيهات ذكية من زر "تنبيهات ذكية" أو إنشاء تنبيه مخصص يدوياً. النظام سيقوم تلقائياً بإنشاء تنبيهات للمواعيد القادمة والمستحقات المالية وباقات الليزر.',
+          'system',
+          'low',
+          now,
+          false,
+          now,
+        ]
+      )
       created = 1
     }
 

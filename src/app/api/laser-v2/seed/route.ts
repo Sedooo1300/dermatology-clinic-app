@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query, uuid } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 const MACHINES = [
@@ -35,18 +35,32 @@ export async function POST() {
 
     // Seed machines
     for (const m of MACHINES) {
-      const existing = await db.laserMachine.findFirst({ where: { name: m.name } })
-      if (!existing) {
-        await db.laserMachine.create({ data: m })
+      const { rows } = await query(
+        `SELECT "id" FROM "LaserMachine" WHERE "name" = $1 LIMIT 1`,
+        [m.name]
+      )
+      if (rows.length === 0) {
+        await query(
+          `INSERT INTO "LaserMachine" ("id", "name", "type", "wavelength", "maxFluence", "spotSizes", "isActive", "notes")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [uuid(), m.name, m.type, m.wavelength, m.maxFluence, m.spotSizes, true, m.notes || null]
+        )
         results.machines++
       }
     }
 
     // Seed areas
     for (const a of AREAS) {
-      const existing = await db.laserArea.findFirst({ where: { name: a.name } })
-      if (!existing) {
-        await db.laserArea.create({ data: a })
+      const { rows } = await query(
+        `SELECT "id" FROM "LaserArea" WHERE "name" = $1 LIMIT 1`,
+        [a.name]
+      )
+      if (rows.length === 0) {
+        await query(
+          `INSERT INTO "LaserArea" ("id", "name", "malePulses", "femalePulses", "pulsePrice", "isActive")
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [uuid(), a.name, a.malePulses, a.femalePulses, a.pulsePrice, true]
+        )
         results.areas++
       }
     }

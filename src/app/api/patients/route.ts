@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query, uuid } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
@@ -8,32 +8,60 @@ export async function GET(req: NextRequest) {
     const gender = searchParams.get('gender') || ''
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = (page - 1) * limit
 
-    const where: Record<string, unknown> = {}
+    const conditions: string[] = []
+    const params: unknown[] = []
+    let paramIndex = 1
+
     if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { phone: { contains: search } },
-      ]
+      conditions.push(`("name" ILIKE '%' || $${paramIndex} || '%' OR "phone" ILIKE '%' || $${paramIndex} || '%')`)
+      params.push(search)
+      paramIndex++
     }
     if (gender) {
-      where.gender = gender
+      conditions.push(`"gender" = $${paramIndex}`)
+      params.push(gender)
+      paramIndex++
     }
 
-    const [patients, total] = await Promise.all([
-      db.patient.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-        include: {
-          _count: { select: { visits: true, photos: true, alerts: true } },
-        },
-      }),
-      db.patient.count({ where }),
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    const [patientsResult, totalResult] = await Promise.all([
+      query(
+        `SELECT p.*,
+          (SELECT COUNT(*)::int FROM "Visit" v WHERE v."patientId" = p.id) as "_count_visits",
+          (SELECT COUNT(*)::int FROM "PatientPhoto" pp WHERE pp."patientId" = p.id) as "_count_photos",
+          (SELECT COUNT(*)::int FROM "Alert" a WHERE a."patientId" = p.id) as "_count_alerts"
+        FROM "Patient" p
+        ${whereClause}
+        ORDER BY p."createdAt" DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...params, limit, offset]
+      ),
+      query(
+        `SELECT COUNT(*)::int as count FROM "Patient" p ${whereClause}`,
+        params
+      ),
     ])
 
-    return NextResponse.json({ patients, total, page, limit })
+    const patients = patientsResult.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      age: row.age,
+      gender: row.gender,
+      notes: row.notes,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      _count: {
+        visits: row._count_visits,
+        photos: row._count_photos,
+        alerts: row._count_alerts,
+      },
+    }))
+
+    return NextResponse.json({ patients, total: totalResult.rows[0].count, page, limit })
   } catch (error) {
     console.error('GET /api/patients error:', error)
     return NextResponse.json({ error: 'خطأ في جلب البيانات' }, { status: 500 })
@@ -49,17 +77,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
     }
 
-    const patient = await db.patient.create({
-      data: {
-        name: name.trim(),
-        phone: phone?.trim() || null,
-        age: age ? parseInt(age) : null,
-        gender: gender || 'male',
-        notes: notes?.trim() || null,
-      },
-    })
+    const id = uuid()
+    const now = new Date()
 
-    return NextResponse.json(patient, { status: 201 })
+    const result = await query(
+      `INSERT INTO "Patient" ("id", "name", "phone", "age", "gender", "notes", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        id,
+        name.trim(),
+        phone?.trim() || null,
+        age ? parseInt(age) : null,
+        gender || 'male',
+        notes?.trim() || null,
+        now,
+        now,
+      ]
+    )
+
+    return NextResponse.json(result.rows[0], { status: 201 })
   } catch (error) {
     console.error('POST /api/patients error:', error)
     return NextResponse.json({ error: 'خطأ في إضافة الحالة' }, { status: 500 })

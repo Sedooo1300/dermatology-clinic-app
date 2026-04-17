@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function DELETE(
@@ -7,7 +7,16 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await db.patientPhoto.delete({ where: { id } })
+
+    const result = await query(
+      `DELETE FROM "PatientPhoto" WHERE id = $1 RETURNING id`,
+      [id]
+    )
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'الصورة غير موجودة' }, { status: 404 })
+    }
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE /api/photos/[id] error:', error)

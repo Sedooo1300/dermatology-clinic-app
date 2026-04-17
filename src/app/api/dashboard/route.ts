@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { startOfMonth, endOfMonth, subMonths, format, startOfDay, endOfDay } from 'date-fns'
 
@@ -11,44 +11,83 @@ export async function GET() {
     const todayEnd = endOfDay(now)
 
     // Total patients
-    const totalPatients = await db.patient.count()
+    const totalPatientsRes = await query<{ count: number }>(
+      `SELECT COUNT(*)::int as count FROM "Patient"`
+    )
+    const totalPatients = totalPatientsRes.rows[0]?.count ?? 0
 
     // Today's visits
-    const todayVisits = await db.visit.count({
-      where: { date: { gte: todayStart, lte: todayEnd } },
-    })
+    const todayVisitsRes = await query<{ count: number }>(
+      `SELECT COUNT(*)::int as count FROM "Visit" WHERE "date" >= $1 AND "date" <= $2`,
+      [todayStart, todayEnd]
+    )
+    const todayVisits = todayVisitsRes.rows[0]?.count ?? 0
 
-    // Month revenue (from visits paid)
-    const monthVisits = await db.visit.findMany({
-      where: { date: { gte: monthStart, lte: monthEnd }, status: 'completed' },
-    })
-    const monthRevenue = monthVisits.reduce((s, v) => s + v.paid, 0)
+    // Month revenue (from completed visits paid)
+    const monthRevenueRes = await query<{ total: number }>(
+      `SELECT COALESCE(SUM("paid"), 0)::float as total FROM "Visit" WHERE "date" >= $1 AND "date" <= $2 AND "status" = 'completed'`,
+      [monthStart, monthEnd]
+    )
+    const monthRevenue = monthRevenueRes.rows[0]?.total ?? 0
 
     // Month expenses
-    const monthExpenses = await db.expense.findMany({
-      where: { date: { gte: monthStart, lte: monthEnd } },
-    })
-    const monthExpenseTotal = monthExpenses.reduce((s, e) => s + e.amount, 0)
+    const monthExpenseRes = await query<{ total: number }>(
+      `SELECT COALESCE(SUM("amount"), 0)::float as total FROM "Expense" WHERE "date" >= $1 AND "date" <= $2`,
+      [monthStart, monthEnd]
+    )
+    const monthExpenseTotal = monthExpenseRes.rows[0]?.total ?? 0
 
-    // Recent visits
-    const recentVisits = await db.visit.findMany({
-      take: 10,
-      orderBy: { date: 'desc' },
-      include: {
-        patient: { select: { id: true, name: true } },
-        sessionType: { select: { name: true } },
-      },
-    })
+    // Recent visits (last 10 with patient name and session type name)
+    const recentVisitsRes = await query<{
+      id: string
+      patientId: string
+      sessionTypeId: string | null
+      date: string
+      price: number
+      paid: number
+      remaining: number
+      notes: string | null
+      status: string
+      createdAt: string
+      updatedAt: string
+      patient: { id: string; name: string } | null
+      sessionType: { name: string } | null
+    }>(
+      `SELECT v.*, 
+        row_to_json(p.*) as "patient",
+        row_to_json(st.*) as "sessionType"
+      FROM "Visit" v
+      LEFT JOIN "Patient" p ON v."patientId" = p.id
+      LEFT JOIN "SessionType" st ON v."sessionTypeId" = st.id
+      ORDER BY v."date" DESC
+      LIMIT 10`
+    )
+    const recentVisits = recentVisitsRes.rows
 
-    // Unread alerts
-    const alerts = await db.alert.findMany({
-      where: { isRead: false },
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        patient: { select: { name: true } },
-      },
-    })
+    // Unread alerts (last 10 with patient name)
+    const alertsRes = await query<{
+      id: string
+      patientId: string | null
+      title: string
+      message: string
+      type: string
+      priority: string
+      date: string
+      isRead: boolean
+      snoozedUntil: string | null
+      actionUrl: string | null
+      createdAt: string
+      updatedAt: string
+      patient: { name: string } | null
+    }>(
+      `SELECT a.*, row_to_json(p.*) as "patient"
+      FROM "Alert" a
+      LEFT JOIN "Patient" p ON a."patientId" = p.id
+      WHERE a."isRead" = false
+      ORDER BY a."createdAt" DESC
+      LIMIT 10`
+    )
+    const alerts = alertsRes.rows
 
     // Revenue chart data (last 6 months)
     const revenueChartData: { month: string; revenue: number; expenses: number; profit: number }[] = []
@@ -57,15 +96,19 @@ export async function GET() {
       const mEnd = endOfMonth(subMonths(now, i))
       const monthName = format(mStart, 'MMM yyyy', { locale: undefined })
 
-      const mVisits = await db.visit.findMany({
-        where: { date: { gte: mStart, lte: mEnd }, status: 'completed' },
-      })
-      const mRevenues = mVisits.reduce((s, v) => s + v.paid, 0)
+      const [mRevenueRes, mExpenseRes] = await Promise.all([
+        query<{ total: number }>(
+          `SELECT COALESCE(SUM("paid"), 0)::float as total FROM "Visit" WHERE "date" >= $1 AND "date" <= $2 AND "status" = 'completed'`,
+          [mStart, mEnd]
+        ),
+        query<{ total: number }>(
+          `SELECT COALESCE(SUM("amount"), 0)::float as total FROM "Expense" WHERE "date" >= $1 AND "date" <= $2`,
+          [mStart, mEnd]
+        ),
+      ])
 
-      const mExpenses = await db.expense.findMany({
-        where: { date: { gte: mStart, lte: mEnd } },
-      })
-      const mExpenseTotal = mExpenses.reduce((s, e) => s + e.amount, 0)
+      const mRevenues = mRevenueRes.rows[0]?.total ?? 0
+      const mExpenseTotal = mExpenseRes.rows[0]?.total ?? 0
 
       revenueChartData.push({
         month: monthName,
@@ -75,29 +118,56 @@ export async function GET() {
       })
     }
 
-    // Upcoming sessions (scheduled)
-    const upcomingSessions = await db.visit.findMany({
-      where: { status: 'scheduled', date: { gte: todayStart } },
-      take: 5,
-      orderBy: { date: 'asc' },
-      include: {
-        patient: { select: { name: true, phone: true } },
-        sessionType: { select: { name: true } },
-      },
-    })
+    // Upcoming sessions (scheduled visits from today onward)
+    const upcomingSessionsRes = await query<{
+      id: string
+      patientId: string
+      sessionTypeId: string | null
+      date: string
+      status: string
+      notes: string | null
+      patient: { name: string; phone: string | null } | null
+      sessionType: { name: string } | null
+    }>(
+      `SELECT v.id, v."patientId", v."sessionTypeId", v."date", v.status, v.notes,
+        row_to_json(p.*) as "patient",
+        row_to_json(st.*) as "sessionType"
+      FROM "Visit" v
+      LEFT JOIN "Patient" p ON v."patientId" = p.id
+      LEFT JOIN "SessionType" st ON v."sessionTypeId" = st.id
+      WHERE v.status = 'scheduled' AND v."date" >= $1
+      ORDER BY v."date" ASC
+      LIMIT 5`,
+      [todayStart]
+    )
+    const upcomingSessions = upcomingSessionsRes.rows
 
-    // Session type stats
-    const sessionTypeStats = await db.sessionType.findMany({
-      include: { _count: { select: { visits: true } } },
-      orderBy: { name: 'asc' },
-    })
+    // Session type stats (all session types with visit count)
+    const sessionTypeStatsRes = await query<{
+      id: string
+      name: string
+      price: number
+      description: string | null
+      isActive: boolean
+      visitCount: string
+    }>(
+      `SELECT st.*, COUNT(v.id)::text as "visitCount"
+      FROM "SessionType" st
+      LEFT JOIN "Visit" v ON v."sessionTypeId" = st.id
+      GROUP BY st.id
+      ORDER BY st.name ASC`
+    )
+    const sessionTypeStats = sessionTypeStatsRes.rows.map(row => ({
+      ...row,
+      _count: { visits: parseInt(row.visitCount, 10) || 0 },
+    }))
 
-    // Pending payments
-    const pendingPayments = await db.visit.aggregate({
-      where: { remaining: { gt: 0 } },
-      _sum: { remaining: true },
-      _count: true,
-    })
+    // Pending payments (sum of remaining where remaining > 0)
+    const pendingPaymentsRes = await query<{ total: number; count: number }>(
+      `SELECT COALESCE(SUM("remaining"), 0)::float as total, COUNT(*)::int as count FROM "Visit" WHERE "remaining" > 0`
+    )
+    const pendingPaymentsTotal = pendingPaymentsRes.rows[0]?.total ?? 0
+    const pendingCount = pendingPaymentsRes.rows[0]?.count ?? 0
 
     return NextResponse.json({
       totalPatients,
@@ -110,8 +180,8 @@ export async function GET() {
       revenueChartData,
       upcomingSessions,
       sessionTypeStats,
-      pendingPayments: pendingPayments._sum.remaining || 0,
-      pendingCount: pendingPayments._count,
+      pendingPayments: pendingPaymentsTotal,
+      pendingCount,
     })
   } catch (error) {
     console.error('GET /api/dashboard error:', error)

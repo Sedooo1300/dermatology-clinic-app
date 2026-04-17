@@ -1,4 +1,4 @@
-import { db } from '@/lib/db'
+import { query } from '@/lib/db'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -10,10 +10,10 @@ export async function POST(req: NextRequest) {
     }
 
     for (const entry of entries) {
-      await db.queueEntry.update({
-        where: { id: entry.id },
-        data: { order: entry.order },
-      })
+      await query(
+        `UPDATE "QueueEntry" SET "order" = $1 WHERE "id" = $2`,
+        [entry.order, entry.id]
+      )
     }
 
     return NextResponse.json({ success: true })
