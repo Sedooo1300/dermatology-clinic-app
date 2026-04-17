@@ -28,7 +28,7 @@ const bottomNavItems = [
 
 const moreMenuItems = [
   { id: 'session-types', label: 'أنواع الجلسات', icon: Scissors, color: 'text-pink-500 bg-pink-50 dark:bg-pink-950/30' },
-  { id: 'finance', label: 'المالية', icon: Wallet, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' },
+  { id: 'laser', label: 'ليزر إزالة الشعر', icon: Zap, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/30' },
   { id: 'reports', label: 'التقارير', icon: FileBarChart, color: 'text-violet-500 bg-violet-50 dark:bg-violet-950/30' },
   { id: 'settings', label: 'الإعدادات', icon: Settings, color: 'text-slate-500 bg-slate-50 dark:bg-slate-950/30' },
 ]
