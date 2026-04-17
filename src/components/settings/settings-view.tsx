@@ -11,9 +11,11 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { Palette, Download, Upload, Trash2, Database, HardDrive, Info } from 'lucide-react'
+import { Palette, Download, Upload, Trash2, Database, HardDrive, Info, RotateCcw, Sun, Moon } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
+import { useTheme } from 'next-themes'
+import { Switch } from '@/components/ui/switch'
 
 const themeOptions: { id: ThemeColor; label: string; color: string; className: string }[] = [
   { id: 'teal', label: 'أخضر مائي', color: 'bg-teal-500', className: '' },
@@ -30,6 +32,7 @@ interface Backup {
 
 export function SettingsView() {
   const { themeColor, setThemeColor } = useAppStore()
+  const { theme, setTheme } = useTheme()
   const [backups, setBackups] = useState<Backup[]>([])
   const [backupName, setBackupName] = useState('')
   const [isLoadingBackups, setIsLoadingBackups] = useState(true)
@@ -152,6 +155,29 @@ export function SettingsView() {
     }
   }
 
+  const handleRestoreBackup = async (backupId: string) => {
+    try {
+      const res = await fetch(`/api/backups`)
+      const allBackups = await res.json()
+      const backup = allBackups.find((b: Backup) => b.id === backupId)
+      if (!backup) throw new Error('Backup not found')
+      
+      const backupData = JSON.parse(backup.data)
+      const response = await fetch('/api/backups/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: backupData }),
+      })
+      
+      if (response.ok) {
+        toast.success('تم استعادة النسخة الاحتياطية بنجاح - جاري إعادة التحميل...')
+        setTimeout(() => window.location.reload(), 2000)
+      }
+    } catch {
+      toast.error('خطأ في استعادة النسخة')
+    }
+  }
+
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -166,26 +192,49 @@ export function SettingsView() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Palette className="w-5 h-5 text-primary" />
-              لون التطبيق
+              المظهر
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-              {themeOptions.map((theme) => (
+          <CardContent className="space-y-4">
+            {/* Dark Mode Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
+              <div className="flex items-center gap-3">
+                {theme === 'dark' ? (
+                  <Moon className="w-5 h-5 text-indigo-500" />
+                ) : (
+                  <Sun className="w-5 h-5 text-amber-500" />
+                )}
+                <div>
+                  <p className="text-sm font-medium">الوضع الليلي</p>
+                  <p className="text-xs text-muted-foreground">{theme === 'dark' ? 'مفعّل' : 'معطّل'}</p>
+                </div>
+              </div>
+              <Switch
+                checked={theme === 'dark'}
+                onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+              />
+            </div>
+            <Separator />
+            {/* Color Theme */}
+            <div>
+              <p className="text-sm font-medium mb-2">لون التطبيق</p>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+              {themeOptions.map((t) => (
                 <button
-                  key={theme.id}
-                  onClick={() => setThemeColor(theme.id)}
+                  key={t.id}
+                  onClick={() => setThemeColor(t.id)}
                   className={cn(
                     'flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all',
-                    themeColor === theme.id
+                    themeColor === t.id
                       ? 'border-primary bg-primary/5 shadow-md'
                       : 'border-transparent hover:border-border'
                   )}
                 >
-                  <div className={cn('w-8 h-8 rounded-full', theme.color)} />
-                  <span className="text-xs font-medium">{theme.label}</span>
+                  <div className={cn('w-8 h-8 rounded-full', t.color)} />
+                  <span className="text-xs font-medium">{t.label}</span>
                 </button>
               ))}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -261,7 +310,17 @@ export function SettingsView() {
                         {formatSize(backup.size)} • {new Date(backup.createdAt).toLocaleDateString('ar-EG')}
                       </p>
                     </div>
-                    <AlertDialog>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-blue-500 shrink-0"
+                        onClick={() => handleRestoreBackup(backup.id)}
+                        title="استعادة"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </Button>
+                      <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 shrink-0">
                           <Trash2 className="w-4 h-4" />
@@ -278,6 +337,7 @@ export function SettingsView() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -306,7 +366,7 @@ export function SettingsView() {
               <Separator />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">الإصدار</span>
-                <Badge variant="outline">1.0.0</Badge>
+                <Badge variant="outline">2.0.0</Badge>
               </div>
               <Separator />
               <div className="flex justify-between">

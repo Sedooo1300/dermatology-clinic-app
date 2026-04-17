@@ -14,6 +14,9 @@ import { FinanceView } from '@/components/finance/finance-view'
 import { ReportsView } from '@/components/reports/reports-view'
 import { SettingsView } from '@/components/settings/settings-view'
 import { AlertsView } from '@/components/alerts/alerts-view'
+import { CalendarView } from '@/components/calendar/calendar-view'
+import { PrescriptionsView } from '@/components/prescriptions/prescriptions-view'
+import { QueueView } from '@/components/queue/queue-view'
 import { ThemeColor } from '@/lib/store'
 
 const emptySubscribe = () => () => {}
@@ -102,6 +105,12 @@ export default function Home() {
         return <FinanceView />
       case 'alerts':
         return <AlertsView />
+      case 'calendar':
+        return <CalendarView />
+      case 'prescriptions':
+        return <PrescriptionsView />
+      case 'queue':
+        return <QueueView />
       case 'reports':
         return <ReportsView />
       case 'settings':

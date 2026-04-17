@@ -9,7 +9,7 @@ import { AlertsWidget } from '@/components/dashboard/alerts-widget'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { CalendarDays, Users, Scissors, ArrowRight, Wallet } from 'lucide-react'
+import { CalendarDays, Users, Scissors, ArrowRight, Wallet, Zap, Calendar, ClipboardList, ListOrdered } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface DashboardData {
@@ -62,7 +62,10 @@ export function DashboardView() {
   const quickActions = [
     { label: 'حالة جديدة', icon: Users, view: 'patients' as const, color: 'bg-emerald-500 hover:bg-emerald-600' },
     { label: 'زيارة جديدة', icon: CalendarDays, view: 'visits' as const, color: 'bg-teal-500 hover:bg-teal-600' },
-    { label: 'أنواع الجلسات', icon: Scissors, view: 'session-types' as const, color: 'bg-amber-500 hover:bg-amber-600' },
+    { label: 'جلسة ليزر', icon: Zap, view: 'laser' as const, color: 'bg-orange-500 hover:bg-orange-600' },
+    { label: 'وصفة طبية', icon: ClipboardList, view: 'prescriptions' as const, color: 'bg-cyan-500 hover:bg-cyan-600' },
+    { label: 'قائمة الانتظار', icon: ListOrdered, view: 'queue' as const, color: 'bg-amber-500 hover:bg-amber-600' },
+    { label: 'التقويم', icon: Calendar, view: 'calendar' as const, color: 'bg-indigo-500 hover:bg-indigo-600' },
   ]
 
   return (

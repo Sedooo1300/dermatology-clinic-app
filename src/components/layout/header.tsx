@@ -3,9 +3,10 @@
 import { useAppStore } from '@/lib/store'
 import { getSocket } from '@/lib/socket'
 import { useEffect, useState } from 'react'
-import { Menu, Wifi, WifiOff, Bell } from 'lucide-react'
+import { Menu, Wifi, WifiOff, Bell, Sun, Moon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useTheme } from 'next-themes'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,12 +26,19 @@ const viewTitles: Record<string, string> = {
   alerts: 'التنبيهات',
   reports: 'التقارير',
   settings: 'الإعدادات',
+  calendar: 'التقويم',
+  prescriptions: 'الوصفات الطبية',
+  queue: 'قائمة الانتظار',
 }
 
 export function Header() {
   const { currentView, toggleSidebar, setIsConnected, isConnected } = useAppStore()
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [alerts, setAlerts] = useState<Array<{ id: string; title: string; message: string; type: string }>>([])
+
+  useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     const socket = getSocket()
@@ -96,6 +104,19 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Dark mode toggle */}
+          {mounted && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="relative"
+            >
+              <Sun className="w-5 h-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute w-5 h-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            </Button>
+          )}
+
           {/* Connection status */}
           <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${isConnected ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/30' : 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/30'}`}>
             {isConnected ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}

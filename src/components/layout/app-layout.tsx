@@ -14,6 +14,9 @@ import {
   Settings,
   ChevronUp,
   Bell,
+  Calendar,
+  ClipboardList,
+  ListOrdered,
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -29,6 +32,9 @@ const bottomNavItems = [
 
 const moreMenuItems = [
   { id: 'session-types', label: 'أنواع الجلسات', icon: Scissors, color: 'text-pink-500 bg-pink-50 dark:bg-pink-950/30' },
+  { id: 'calendar', label: 'التقويم', icon: Calendar, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30' },
+  { id: 'prescriptions', label: 'الوصفات الطبية', icon: ClipboardList, color: 'text-teal-500 bg-teal-50 dark:bg-teal-950/30' },
+  { id: 'queue', label: 'قائمة الانتظار', icon: ListOrdered, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/30' },
   { id: 'alerts', label: 'التنبيهات', icon: Bell, color: 'text-red-500 bg-red-50 dark:bg-red-950/30' },
   { id: 'finance', label: 'المالية', icon: Wallet, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' },
   { id: 'reports', label: 'التقارير', icon: FileBarChart, color: 'text-violet-500 bg-violet-50 dark:bg-violet-950/30' },
@@ -41,7 +47,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const menuRef = useRef<HTMLDivElement>(null)
 
   const handleNav = (id: string) => {
-    setCurrentView(id as 'dashboard' | 'patients' | 'visits' | 'laser' | 'finance' | 'session-types' | 'alerts' | 'reports' | 'settings')
+    setCurrentView(id as 'dashboard' | 'patients' | 'visits' | 'laser' | 'finance' | 'session-types' | 'alerts' | 'reports' | 'settings' | 'calendar' | 'prescriptions' | 'queue')
     setSelectedPatientId(null)
     setShowMoreMenu(false)
   }
@@ -67,7 +73,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [showMoreMenu])
 
-  const isMoreSection = ['session-types', 'alerts', 'finance', 'reports', 'settings'].includes(currentView)
+  const isMoreSection = ['session-types', 'calendar', 'prescriptions', 'queue', 'alerts', 'finance', 'reports', 'settings'].includes(currentView)
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

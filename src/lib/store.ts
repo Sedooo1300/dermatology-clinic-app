@@ -12,6 +12,9 @@ export type AppView =
   | 'alerts'
   | 'reports'
   | 'settings'
+  | 'calendar'
+  | 'prescriptions'
+  | 'queue'
 
 export type ThemeColor = 'teal' | 'blue' | 'purple' | 'orange' | 'red' | 'green'
 
