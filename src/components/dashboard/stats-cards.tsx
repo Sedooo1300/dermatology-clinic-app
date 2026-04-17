@@ -2,18 +2,18 @@
 
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Users, CalendarDays, Wallet, TrendingUp } from 'lucide-react'
+import { Users, CalendarDays, Bell, Scissors } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface StatsCardsProps {
   totalPatients: number
   todayVisits: number
-  monthRevenue: number
-  monthProfit: number
+  alertsCount: number
+  sessionTypesCount: number
   isLoading?: boolean
 }
 
-export function StatsCards({ totalPatients, todayVisits, monthRevenue, monthProfit, isLoading }: StatsCardsProps) {
+export function StatsCards({ totalPatients, todayVisits, alertsCount, sessionTypesCount, isLoading }: StatsCardsProps) {
   const stats = [
     {
       label: 'إجمالي الحالات',
@@ -21,6 +21,7 @@ export function StatsCards({ totalPatients, todayVisits, monthRevenue, monthProf
       icon: Users,
       color: 'text-emerald-600 dark:text-emerald-400',
       bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+      border: alertsCount > 0 ? '' : '',
     },
     {
       label: 'زيارات اليوم',
@@ -30,18 +31,18 @@ export function StatsCards({ totalPatients, todayVisits, monthRevenue, monthProf
       bg: 'bg-amber-50 dark:bg-amber-950/30',
     },
     {
-      label: 'إيرادات الشهر',
-      value: `${monthRevenue.toLocaleString('ar-EG')} ج.م`,
-      icon: Wallet,
-      color: 'text-teal-600 dark:text-teal-400',
-      bg: 'bg-teal-50 dark:bg-teal-950/30',
+      label: 'التنبيهات',
+      value: alertsCount.toLocaleString('ar-EG'),
+      icon: Bell,
+      color: alertsCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground',
+      bg: alertsCount > 0 ? 'bg-red-50 dark:bg-red-950/30' : 'bg-muted/50',
     },
     {
-      label: 'صافي الربح',
-      value: `${monthProfit.toLocaleString('ar-EG')} ج.م`,
-      icon: TrendingUp,
-      color: monthProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400',
-      bg: monthProfit >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30',
+      label: 'أنواع الجلسات',
+      value: sessionTypesCount.toLocaleString('ar-EG'),
+      icon: Scissors,
+      color: 'text-teal-600 dark:text-teal-400',
+      bg: 'bg-teal-50 dark:bg-teal-950/30',
     },
   ]
 
