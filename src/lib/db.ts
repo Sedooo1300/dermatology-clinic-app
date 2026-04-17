@@ -346,6 +346,15 @@ CREATE TABLE IF NOT EXISTS "Backup" (
   "size" INTEGER NOT NULL DEFAULT 0,
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS "PatientNote" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "patientId" TEXT NOT NULL,
+  "content" TEXT NOT NULL,
+  "category" TEXT NOT NULL DEFAULT 'general',
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "PatientNote_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "Patient" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
 `
 
 export async function setupDatabase(): Promise<{ created: string[]; totalTables: number }> {

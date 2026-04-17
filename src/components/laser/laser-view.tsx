@@ -22,7 +22,8 @@ import {
   Zap, Plus, Edit, Trash2, User, Package, Cpu, DollarSign,
   Calendar, TrendingUp, Activity, AlertTriangle, CheckCircle,
   Clock, BarChart3, Search, X, ChevronLeft, ChevronRight,
-  Eye, FileText, Settings, RefreshCw, Stethoscope, Info
+  Eye, FileText, Settings, RefreshCw, Stethoscope, Info,
+  MessageSquare, Send
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -149,6 +150,11 @@ export function LaserView() {
   const [patients, setPatients] = useState<Array<{ id: string; name: string; phone: string | null; gender: string; age: number | null }>>([])
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Notes for profile detail
+  const [profileNotes, setProfileNotes] = useState<Array<{ id: string; patientId: string; content: string; category: string; createdAt: string }>>([])
+  const [newProfileNote, setNewProfileNote] = useState('')
+  const [profileNoteCategory, setProfileNoteCategory] = useState('laser')
 
   // Dialogs
   const [showMachineForm, setShowMachineForm] = useState(false)
@@ -421,9 +427,58 @@ export function LaserView() {
       const res = await fetch(`/api/laser-v2/profiles/${id}`)
       const data = await res.json()
       setShowProfileDetail(data)
+      // Fetch patient notes
+      if (data?.patientId) {
+        const notesRes = await fetch(`/api/patients/${data.patientId}/notes`)
+        if (notesRes.ok) setProfileNotes(await notesRes.json())
+      } else {
+        setProfileNotes([])
+      }
     } catch {
       toast.error('خطأ في جلب البيانات')
     }
+  }
+
+  const handleAddProfileNote = async () => {
+    if (!newProfileNote.trim() || !showProfileDetail?.patientId) return
+    try {
+      const res = await fetch(`/api/patients/${showProfileDetail.patientId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newProfileNote, category: profileNoteCategory }),
+      })
+      if (res.ok) {
+        toast.success('تم إضافة الملاحظة')
+        setNewProfileNote('')
+        const notesRes = await fetch(`/api/patients/${showProfileDetail.patientId}/notes`)
+        if (notesRes.ok) setProfileNotes(await notesRes.json())
+      }
+    } catch {
+      toast.error('خطأ في إضافة الملاحظة')
+    }
+  }
+
+  const handleDeleteProfileNote = async (noteId: string) => {
+    if (!showProfileDetail?.patientId) return
+    try {
+      const res = await fetch(`/api/patients/${showProfileDetail.patientId}/notes/${noteId}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('تم حذف الملاحظة')
+        const notesRes = await fetch(`/api/patients/${showProfileDetail.patientId}/notes`)
+        if (notesRes.ok) setProfileNotes(await notesRes.json())
+      }
+    } catch {
+      toast.error('خطأ في حذف الملاحظة')
+    }
+  }
+
+  const NOTES_CATEGORY_LABELS: Record<string, string> = {
+    general: 'عامة',
+    visit: 'زيارة',
+    treatment: 'علاج',
+    laser: 'ليزر',
+    followup: 'متابعة',
+    finance: 'مالية',
   }
 
   const renderProfileDetail = () => {
@@ -533,6 +588,71 @@ export function LaserView() {
                           <p className="text-xs text-muted-foreground">{pkg.area?.name} • {formatCurrency(pkg.totalPrice)}</p>
                         </div>
                         <Badge className={cn('text-[10px]', STATUS_MAP[pkg.status]?.color)}>{STATUS_MAP[pkg.status]?.label}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Patient Notes */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-primary" />
+                  ملاحظات المريض ({profileNotes.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Add note */}
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Select value={profileNoteCategory} onValueChange={setProfileNoteCategory}>
+                        <SelectTrigger className="w-24 h-7 text-[10px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(NOTES_CATEGORY_LABELS).map(([key, label]) => (
+                            <SelectItem key={key} value={key} className="text-xs">{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Input
+                        value={newProfileNote}
+                        onChange={(e) => setNewProfileNote(e.target.value)}
+                        placeholder="أضف ملاحظة..."
+                        className="h-8 text-xs"
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddProfileNote() } }}
+                      />
+                      <Button size="icon" className="h-8 w-8 shrink-0" onClick={handleAddProfileNote} disabled={!newProfileNote.trim()}>
+                        <Send className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes list */}
+                {profileNotes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-3">لا توجد ملاحظات</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {profileNotes.map((note) => (
+                      <div key={note.id} className="flex items-start justify-between gap-2 p-2 rounded-lg bg-muted/50">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0">
+                              {NOTES_CATEGORY_LABELS[note.category] || note.category}
+                            </Badge>
+                            <span className="text-[9px] text-muted-foreground">{formatRelative(note.createdAt)}</span>
+                          </div>
+                          <p className="text-xs leading-relaxed">{note.content}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => handleDeleteProfileNote(note.id)}>
+                          <Trash2 className="w-3 h-3 text-red-400" />
+                        </Button>
                       </div>
                     ))}
                   </div>

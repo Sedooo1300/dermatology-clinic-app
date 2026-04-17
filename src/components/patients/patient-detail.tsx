@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { ArrowRight, CalendarDays, Wallet, FileText, Camera, Trash2, Download, Upload } from 'lucide-react'
+import { ArrowRight, CalendarDays, Wallet, FileText, Camera, Trash2, Download, Upload, MessageSquare, Plus, Edit3, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { emitChange } from '@/lib/socket'
@@ -41,6 +41,13 @@ export function PatientDetail() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [showFullPhoto, setShowFullPhoto] = useState<string | null>(null)
 
+  // Notes state
+  const [notes, setNotes] = useState<Array<{ id: string; patientId: string; content: string; category: string; createdAt: string }>>([])
+  const [newNote, setNewNote] = useState('')
+  const [noteCategory, setNoteCategory] = useState('general')
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingNoteContent, setEditingNoteContent] = useState('')
+
   const fetchPatient = useCallback(async () => {
     if (!selectedPatientId) return
     setIsLoading(true)
@@ -61,6 +68,75 @@ export function PatientDetail() {
   }, [selectedPatientId, setCurrentView])
 
   useEffect(() => { fetchPatient() }, [fetchPatient])
+
+  // Fetch notes
+  const fetchNotes = useCallback(async () => {
+    if (!selectedPatientId) return
+    try {
+      const res = await fetch(`/api/patients/${selectedPatientId}/notes`)
+      if (res.ok) setNotes(await res.json())
+    } catch { /* silent */ }
+  }, [selectedPatientId])
+
+  useEffect(() => { fetchNotes() }, [fetchNotes])
+
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !selectedPatientId) return
+    try {
+      const res = await fetch(`/api/patients/${selectedPatientId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newNote, category: noteCategory }),
+      })
+      if (res.ok) {
+        toast.success('تم إضافة الملاحظة')
+        setNewNote('')
+        fetchNotes()
+      }
+    } catch {
+      toast.error('خطأ في إضافة الملاحظة')
+    }
+  }
+
+  const handleUpdateNote = async (noteId: string) => {
+    if (!editingNoteContent.trim()) return
+    try {
+      const res = await fetch(`/api/patients/${selectedPatientId}/notes/${noteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editingNoteContent, category: noteCategory }),
+      })
+      if (res.ok) {
+        toast.success('تم تعديل الملاحظة')
+        setEditingNoteId(null)
+        setEditingNoteContent('')
+        fetchNotes()
+      }
+    } catch {
+      toast.error('خطأ في تعديل الملاحظة')
+    }
+  }
+
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      const res = await fetch(`/api/patients/${selectedPatientId}/notes/${noteId}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('تم حذف الملاحظة')
+        fetchNotes()
+      }
+    } catch {
+      toast.error('خطأ في حذف الملاحظة')
+    }
+  }
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    general: 'عامة',
+    visit: 'زيارة',
+    treatment: 'علاج',
+    laser: 'ليزر',
+    followup: 'متابعة',
+    finance: 'مالية',
+  }
 
   const handleCapturePhoto = async (file: File | null) => {
     if (!file && !photoPreview) return
@@ -219,9 +295,13 @@ export function PatientDetail() {
 
       {/* Tabs */}
       <Tabs value={patientDetailTab} onValueChange={setPatientDetailTab}>
-        <TabsList className="grid grid-cols-2 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="visits">الزيارات</TabsTrigger>
           <TabsTrigger value="photos">الصور ({patient.photos.length})</TabsTrigger>
+          <TabsTrigger value="notes" className="gap-1.5">
+            <MessageSquare className="w-3.5 h-3.5" />
+            الملاحظات ({notes.length})
+          </TabsTrigger>
         </TabsList>
 
         {/* Visits Tab */}
@@ -338,6 +418,123 @@ export function PatientDetail() {
           {patient.photos.length === 0 && (
             <p className="text-center py-8 text-muted-foreground">لا توجد صور</p>
           )}
+        </TabsContent>
+
+        {/* Notes Tab */}
+        <TabsContent value="notes" className="mt-4">
+          {/* Add Note */}
+          <Card className="mb-4">
+            <CardContent className="p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Select value={noteCategory} onValueChange={setNoteCategory}>
+                  <SelectTrigger className="w-28 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2">
+                <Textarea
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  placeholder="اكتب ملاحظة جديدة..."
+                  className="min-h-[60px] text-sm resize-none"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddNote() } }}
+                />
+                <Button size="icon" onClick={handleAddNote} disabled={!newNote.trim()} className="shrink-0 self-end h-10 w-10">
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Notes Timeline */}
+          <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
+            {notes.length === 0 ? (
+              <div className="text-center py-8">
+                <MessageSquare className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+                <p className="text-muted-foreground text-sm">لا توجد ملاحظات</p>
+                <p className="text-xs text-muted-foreground mt-1">أضف ملاحظة جديدة لتتبع تطور حالة المريض</p>
+              </div>
+            ) : (
+              <AnimatePresence>
+                {notes.map((note, index) => (
+                  <motion.div
+                    key={note.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                  >
+                    {editingNoteId === note.id ? (
+                      <Card className="border-primary/50 ring-1 ring-primary/20">
+                        <CardContent className="p-3 space-y-2">
+                          <Textarea
+                            value={editingNoteContent}
+                            onChange={(e) => setEditingNoteContent(e.target.value)}
+                            className="min-h-[50px] text-sm resize-none"
+                            autoFocus
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <Button size="sm" variant="ghost" onClick={() => { setEditingNoteId(null); setEditingNoteContent('') }}>إلغاء</Button>
+                            <Button size="sm" onClick={() => handleUpdateNote(note.id)} className="bg-primary text-primary-foreground">حفظ</Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card className="hover:shadow-sm transition-shadow">
+                        <CardContent className="p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                  {CATEGORY_LABELS[note.category] || note.category}
+                                </Badge>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {formatRelative(note.createdAt)}
+                                </span>
+                              </div>
+                              <p className="text-sm whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => { setEditingNoteId(note.id); setEditingNoteContent(note.content) }}
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7">
+                                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>حذف الملاحظة</AlertDialogTitle>
+                                    <AlertDialogDescription>هل أنت متأكد من حذف هذه الملاحظة؟ لا يمكن التراجع عن هذا الإجراء.</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteNote(note.id)}>حذف</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 
