@@ -122,17 +122,20 @@ model Revenue {
 
 // التنبيهات والإشعارات
 model Alert {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   patientId     String?
   title         String
   message       String
-  type          String   @default("reminder")
-  date          DateTime @default(now())
-  isRead        Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  type          String    @default("reminder")  // reminder, appointment, payment, package, followup, laser, custom, birthday, system
+  priority      String    @default("normal")    // urgent, high, normal, low
+  date          DateTime  @default(now())
+  isRead        Boolean   @default(false)
+  snoozedUntil  DateTime?
+  actionUrl     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  patient       Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  patient       Patient?  @relation(fields: [patientId], references: [id], onDelete: SetNull)
 }
 
 // نسخ احتياطية

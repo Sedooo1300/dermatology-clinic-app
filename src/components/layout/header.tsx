@@ -22,6 +22,7 @@ const viewTitles: Record<string, string> = {
   laser: 'ليزر إزالة الشعر',
   visits: 'الزيارات',
   finance: 'المالية',
+  alerts: 'التنبيهات',
   reports: 'التقارير',
   settings: 'الإعدادات',
 }

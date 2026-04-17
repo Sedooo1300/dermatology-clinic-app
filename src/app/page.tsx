@@ -13,6 +13,7 @@ import { VisitList } from '@/components/visits/visit-list'
 import { FinanceView } from '@/components/finance/finance-view'
 import { ReportsView } from '@/components/reports/reports-view'
 import { SettingsView } from '@/components/settings/settings-view'
+import { AlertsView } from '@/components/alerts/alerts-view'
 import { ThemeColor } from '@/lib/store'
 
 const emptySubscribe = () => () => {}
@@ -99,6 +100,8 @@ export default function Home() {
         return <VisitList />
       case 'finance':
         return <FinanceView />
+      case 'alerts':
+        return <AlertsView />
       case 'reports':
         return <ReportsView />
       case 'settings':

@@ -8,16 +8,19 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await req.json()
-    const { title, message, type, isRead } = body
+    const { title, message, type, priority, isRead, snoozedUntil } = body
+
+    const updateData: Record<string, unknown> = {}
+    if (title !== undefined) updateData.title = title.trim()
+    if (message !== undefined) updateData.message = message.trim()
+    if (type !== undefined) updateData.type = type
+    if (priority !== undefined) updateData.priority = priority
+    if (isRead !== undefined) updateData.isRead = Boolean(isRead)
+    if (snoozedUntil !== undefined) updateData.snoozedUntil = snoozedUntil ? new Date(snoozedUntil) : null
 
     const alert = await db.alert.update({
       where: { id },
-      data: {
-        title: title?.trim() || undefined,
-        message: message?.trim() || undefined,
-        type: type || undefined,
-        isRead: isRead !== undefined ? Boolean(isRead) : undefined,
-      },
+      data: updateData,
       include: {
         patient: { select: { id: true, name: true } },
       },

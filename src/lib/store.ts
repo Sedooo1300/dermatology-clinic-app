@@ -9,6 +9,7 @@ export type AppView =
   | 'laser'
   | 'visits'
   | 'finance'
+  | 'alerts'
   | 'reports'
   | 'settings'
 

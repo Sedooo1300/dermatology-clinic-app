@@ -13,6 +13,7 @@ import {
   Settings,
   X,
   Stethoscope,
+  Bell,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -21,6 +22,7 @@ const navItems = [
   { id: 'patients', label: 'الحالات', icon: Users },
   { id: 'session-types', label: 'أنواع الجلسات', icon: Scissors },
   { id: 'laser', label: 'الليزر', icon: Zap },
+  { id: 'alerts', label: 'التنبيهات', icon: Bell },
   { id: 'visits', label: 'الزيارات', icon: CalendarDays },
   { id: 'finance', label: 'المالية', icon: Wallet },
   { id: 'reports', label: 'التقارير', icon: FileBarChart },
