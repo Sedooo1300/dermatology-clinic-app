@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import { cn, formatCurrency, formatDate, formatRelative, getStatusLabel, getStatusColor, getGenderLabel } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { ArrowRight, CalendarDays, Wallet, FileText, Camera, Trash2, Download, Upload, MessageSquare, Plus, Edit3, Send } from 'lucide-react'
+import { ArrowRight, CalendarDays, Wallet, FileText, Camera, Trash2, Download, Upload, MessageSquare, Plus, Edit3, Send, GitCompare, LayoutGrid, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { emitChange } from '@/lib/socket'
@@ -32,6 +32,10 @@ interface PatientDetail {
   }>
 }
 
+type Photo = PatientDetail['photos'][number]
+
+const ARABIC_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+
 export function PatientDetail() {
   const { selectedPatientId, setCurrentView, patientDetailTab, setPatientDetailTab } = useAppStore()
   const [patient, setPatient] = useState<PatientDetail | null>(null)
@@ -47,6 +51,14 @@ export function PatientDetail() {
   const [noteCategory, setNoteCategory] = useState('general')
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editingNoteContent, setEditingNoteContent] = useState('')
+
+  // Compare & view state
+  const [showCompareView, setShowCompareView] = useState(false)
+  const [showTimeline, setShowTimeline] = useState(false)
+  const [selectedCompareIndex, setSelectedCompareIndex] = useState(0)
+  const [sliderPos, setSliderPos] = useState(50)
+  const [isDragging, setIsDragging] = useState(false)
+  const compareContainerRef = useRef<HTMLDivElement>(null)
 
   const fetchPatient = useCallback(async () => {
     if (!selectedPatientId) return
@@ -79,6 +91,34 @@ export function PatientDetail() {
   }, [selectedPatientId])
 
   useEffect(() => { fetchNotes() }, [fetchNotes])
+
+  // Slider drag handlers
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      if (!compareContainerRef.current) return
+      const rect = compareContainerRef.current.getBoundingClientRect()
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+      const x = clientX - rect.left
+      const pct = Math.max(0, Math.min(100, (x / rect.width) * 100))
+      setSliderPos(pct)
+    }
+
+    const handleUp = () => setIsDragging(false)
+
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+    window.addEventListener('touchmove', handleMove)
+    window.addEventListener('touchend', handleUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+      window.removeEventListener('touchmove', handleMove)
+      window.removeEventListener('touchend', handleUp)
+    }
+  }, [isDragging])
 
   const handleAddNote = async () => {
     if (!newNote.trim() || !selectedPatientId) return
@@ -211,6 +251,58 @@ export function PatientDetail() {
     }
   }
 
+  // Derived data — computed before early returns to satisfy rules-of-hooks
+  const allPhotos = patient?.photos ?? []
+  const beforePhotos = allPhotos.filter((p) => p.type === 'before')
+  const afterPhotos = allPhotos.filter((p) => p.type === 'after')
+
+  const comparePairs = useMemo(() => {
+    const pairs: Array<{ before: Photo; after: Photo }> = []
+    const usedAfterIds = new Set<string>()
+
+    const sortedBefore = [...beforePhotos].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+    const sortedAfter = [...afterPhotos].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+
+    for (const before of sortedBefore) {
+      const beforeDate = new Date(before.createdAt)
+      const bestAfter = sortedAfter.find(
+        (a) => !usedAfterIds.has(a.id) && new Date(a.createdAt) >= beforeDate
+      )
+      if (bestAfter) {
+        pairs.push({ before, after: bestAfter })
+        usedAfterIds.add(bestAfter.id)
+      }
+    }
+
+    return pairs
+  }, [beforePhotos, afterPhotos])
+
+  const photosByMonth = useMemo(() => {
+    const sorted = [...allPhotos].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    const groups: Record<string, Photo[]> = {}
+
+    for (const photo of sorted) {
+      const date = new Date(photo.createdAt)
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      if (!groups[key]) groups[key] = []
+      groups[key].push(photo)
+    }
+
+    return Object.entries(groups).map(([key, photos]) => {
+      const [year, month] = key.split('-')
+      return {
+        label: `${ARABIC_MONTHS[parseInt(month) - 1]} ${year}`,
+        photos,
+      }
+    })
+  }, [allPhotos])
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -225,8 +317,68 @@ export function PatientDetail() {
 
   if (!patient) return null
 
-  const beforePhotos = patient.photos.filter((p) => p.type === 'before')
-  const afterPhotos = patient.photos.filter((p) => p.type === 'after')
+  // Reusable photo card renderer
+  const renderPhotoCard = (photo: Photo) => (
+    <motion.div
+      key={photo.id}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.2 }}
+      className="relative group aspect-square rounded-xl overflow-hidden bg-muted cursor-pointer border-2 transition-shadow hover:shadow-md"
+      style={{ borderColor: photo.type === 'before' ? 'var(--color-amber-400)' : 'var(--color-emerald-400)' }}
+      onClick={() => setShowFullPhoto(photo.photoUrl)}
+    >
+      <img
+        src={photo.photoUrl}
+        alt={photo.type === 'before' ? 'قبل' : 'بعد'}
+        className="w-full h-full object-cover"
+      />
+
+      {/* Type badge */}
+      <Badge
+        className={cn(
+          'absolute top-1.5 right-1.5 text-[10px] px-1.5 py-0.5 shadow-sm font-medium z-10',
+          photo.type === 'before' ? 'bg-amber-500 text-white hover:bg-amber-500' : 'bg-emerald-500 text-white hover:bg-emerald-500'
+        )}
+      >
+        {photo.type === 'before' ? 'قبل' : 'بعد'}
+      </Badge>
+
+      {/* Date & notes overlay on hover */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent p-2 pt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+        <p className="text-[10px] text-white font-medium">{formatDate(photo.createdAt)}</p>
+        {photo.notes && (
+          <p className="text-[10px] text-white/80 truncate mt-0.5">{photo.notes}</p>
+        )}
+      </div>
+
+      {/* Delete button on hover */}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="destructive"
+              size="icon"
+              className="h-8 w-8 shadow-lg"
+              onClick={(e) => { e.stopPropagation() }}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>حذف الصورة</AlertDialogTitle>
+              <AlertDialogDescription>هل أنت متأكد من حذف هذه الصورة؟</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>إلغاء</AlertDialogCancel>
+              <AlertDialogAction onClick={() => handleDeletePhoto(photo.id)}>حذف</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </motion.div>
+  )
 
   return (
     <div className="space-y-4">
@@ -338,85 +490,213 @@ export function PatientDetail() {
 
         {/* Photos Tab */}
         <TabsContent value="photos" className="mt-4">
-          <div className="flex gap-2 mb-4">
-            <Button onClick={() => { setPhotoType('before'); setShowPhotoDialog(true) }} variant="outline" className="gap-2 flex-1">
+          {/* Upload buttons */}
+          <div className="flex gap-2 mb-3">
+            <Button onClick={() => { setPhotoType('before'); setShowPhotoDialog(true) }} variant="outline" className="gap-2 flex-1 border-amber-400 text-amber-600 hover:bg-amber-50">
               <Camera className="w-4 h-4" />
               صورة قبل
             </Button>
-            <Button onClick={() => { setPhotoType('after'); setShowPhotoDialog(true) }} variant="outline" className="gap-2 flex-1">
+            <Button onClick={() => { setPhotoType('after'); setShowPhotoDialog(true) }} variant="outline" className="gap-2 flex-1 border-emerald-400 text-emerald-600 hover:bg-emerald-50">
               <Camera className="w-4 h-4" />
               صورة بعد
             </Button>
           </div>
 
-          {/* Before Photos */}
-          {beforePhotos.length > 0 && (
-            <div className="mb-6">
-              <h4 className="font-bold text-sm mb-2 text-amber-600">صور قبل العلاج ({beforePhotos.length})</h4>
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                {beforePhotos.map((photo) => (
-                  <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden bg-muted cursor-pointer" onClick={() => setShowFullPhoto(photo.photoUrl)}>
-                    <img src={photo.photoUrl} alt="قبل" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation() }}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>حذف الصورة</AlertDialogTitle>
-                            <AlertDialogDescription>هل أنت متأكد من حذف هذه الصورة؟</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeletePhoto(photo.id)}>حذف</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* View toggle & Compare button */}
+          {patient.photos.length > 0 && (
+            <motion.div
+              className="flex gap-1 mb-4 p-1 bg-muted rounded-lg"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Button
+                variant={!showTimeline ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setShowTimeline(false)}
+                className="gap-1.5 flex-1 h-8 text-xs"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                شبكة
+              </Button>
+              <Button
+                variant={showTimeline ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setShowTimeline(true)}
+                className="gap-1.5 flex-1 h-8 text-xs"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                خط زمني
+              </Button>
+              {comparePairs.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedCompareIndex(0)
+                    setSliderPos(50)
+                    setShowCompareView(true)
+                  }}
+                  className="gap-1.5 flex-1 h-8 text-xs text-primary hover:text-primary"
+                >
+                  <GitCompare className="w-3.5 h-3.5" />
+                  مقارنة
+                  <Badge className="bg-primary text-primary-foreground text-[9px] px-1 min-w-[16px] h-4">
+                    {comparePairs.length}
+                  </Badge>
+                </Button>
+              )}
+            </motion.div>
           )}
 
-          {/* After Photos */}
-          {afterPhotos.length > 0 && (
-            <div className="mb-6">
-              <h4 className="font-bold text-sm mb-2 text-emerald-600">صور بعد العلاج ({afterPhotos.length})</h4>
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                {afterPhotos.map((photo) => (
-                  <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden bg-muted cursor-pointer" onClick={() => setShowFullPhoto(photo.photoUrl)}>
-                    <img src={photo.photoUrl} alt="بعد" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation() }}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>حذف الصورة</AlertDialogTitle>
-                            <AlertDialogDescription>هل أنت متأكد من حذف هذه الصورة؟</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeletePhoto(photo.id)}>حذف</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+          {/* Grid View */}
+          <AnimatePresence mode="wait">
+            {!showTimeline && patient.photos.length > 0 && (
+              <motion.div
+                key="grid-view"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="max-h-[500px] overflow-y-auto custom-scrollbar"
+              >
+                {/* Before Photos */}
+                {beforePhotos.length > 0 && (
+                  <div className="mb-5">
+                    <h4 className="font-bold text-sm mb-2 text-amber-600 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      صور قبل العلاج ({beforePhotos.length})
+                    </h4>
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                      {beforePhotos.map(renderPhotoCard)}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                )}
 
+                {/* After Photos */}
+                {afterPhotos.length > 0 && (
+                  <div className="mb-2">
+                    <h4 className="font-bold text-sm mb-2 text-emerald-600 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      صور بعد العلاج ({afterPhotos.length})
+                    </h4>
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                      {afterPhotos.map(renderPhotoCard)}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* Timeline View */}
+            {showTimeline && patient.photos.length > 0 && (
+              <motion.div
+                key="timeline-view"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="max-h-[500px] overflow-y-auto custom-scrollbar pl-2"
+              >
+                <div className="relative">
+                  {/* Vertical timeline line */}
+                  <div className="absolute right-[9px] top-2 bottom-2 w-0.5 bg-border" />
+
+                  {photosByMonth.map((month, monthIdx) => (
+                    <motion.div
+                      key={month.label}
+                      className="relative pr-8 pb-6 last:pb-0"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: monthIdx * 0.05 }}
+                    >
+                      {/* Timeline dot */}
+                      <div className="absolute right-2 top-1 w-[18px] h-[18px] rounded-full bg-primary border-[3px] border-background shadow-sm z-10" />
+
+                      {/* Month label */}
+                      <h4 className="font-bold text-sm mb-3 text-foreground">{month.label}</h4>
+
+                      {/* Photos grid for this month */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {month.photos.map((photo) => (
+                          <div
+                            key={photo.id}
+                            className="relative group aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer border-2 transition-all hover:shadow-md"
+                            style={{
+                              borderColor: photo.type === 'before' ? 'var(--color-amber-400)' : 'var(--color-emerald-400)',
+                            }}
+                            onClick={() => setShowFullPhoto(photo.photoUrl)}
+                          >
+                            <img
+                              src={photo.photoUrl}
+                              alt={photo.type === 'before' ? 'قبل' : 'بعد'}
+                              className="w-full h-full object-cover"
+                            />
+
+                            {/* Type badge */}
+                            <Badge
+                              className={cn(
+                                'absolute top-1 right-1 text-[9px] px-1 py-0 shadow-sm',
+                                photo.type === 'before'
+                                  ? 'bg-amber-500 text-white hover:bg-amber-500'
+                                  : 'bg-emerald-500 text-white hover:bg-emerald-500'
+                              )}
+                            >
+                              {photo.type === 'before' ? 'قبل' : 'بعد'}
+                            </Badge>
+
+                            {/* Date overlay */}
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-1.5 pt-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <p className="text-[9px] text-white font-medium">
+                                {formatDate(photo.createdAt)}
+                              </p>
+                              {photo.notes && (
+                                <p className="text-[9px] text-white/75 truncate">{photo.notes}</p>
+                              )}
+                            </div>
+
+                            {/* Delete on hover */}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="destructive"
+                                    size="icon"
+                                    className="h-7 w-7 shadow-lg"
+                                    onClick={(e) => { e.stopPropagation() }}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>حذف الصورة</AlertDialogTitle>
+                                    <AlertDialogDescription>هل أنت متأكد من حذف هذه الصورة؟</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeletePhoto(photo.id)}>حذف</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Empty state */}
           {patient.photos.length === 0 && (
-            <p className="text-center py-8 text-muted-foreground">لا توجد صور</p>
+            <div className="text-center py-8">
+              <Camera className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground text-sm">لا توجد صور</p>
+              <p className="text-xs text-muted-foreground mt-1">أضف صور قبل وبعد العلاج لمتابعة تطور الحالة</p>
+            </div>
           )}
         </TabsContent>
 
@@ -587,6 +867,185 @@ export function PatientDetail() {
         <DialogContent className="max-w-lg p-2">
           {showFullPhoto && (
             <img src={showFullPhoto} alt="صورة" className="w-full rounded-xl" />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Before/After Compare Dialog */}
+      <Dialog open={showCompareView} onOpenChange={(open) => { setShowCompareView(open); setIsDragging(false) }}>
+        <DialogContent className="max-w-2xl p-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitCompare className="w-5 h-5" />
+              مقارنة قبل وبعد العلاج
+            </DialogTitle>
+          </DialogHeader>
+
+          {comparePairs.length > 0 ? (
+            <div className="space-y-4">
+              {/* Pair selector thumbnails */}
+              {comparePairs.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                  {comparePairs.map((pair, idx) => (
+                    <button
+                      key={`${pair.before.id}-${pair.after.id}`}
+                      onClick={() => {
+                        setSelectedCompareIndex(idx)
+                        setSliderPos(50)
+                      }}
+                      className={cn(
+                        'flex gap-0.5 shrink-0 rounded-lg overflow-hidden border-2 transition-all',
+                        selectedCompareIndex === idx
+                          ? 'border-primary ring-2 ring-primary/20'
+                          : 'border-transparent opacity-60 hover:opacity-100'
+                      )}
+                    >
+                      <div className="w-10 h-10 relative">
+                        <img src={pair.before.photoUrl} alt="قبل" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 border-l border-white/50" />
+                      </div>
+                      <div className="w-10 h-10">
+                        <img src={pair.after.photoUrl} alt="بعد" className="w-full h-full object-cover" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Slider comparison */}
+              {comparePairs[selectedCompareIndex] && (
+                <>
+                  <div
+                    ref={compareContainerRef}
+                    className="relative aspect-[4/3] rounded-xl overflow-hidden bg-muted select-none"
+                    onMouseDown={() => setIsDragging(true)}
+                    onTouchStart={() => setIsDragging(true)}
+                  >
+                    {/* After photo (base layer) */}
+                    <img
+                      src={comparePairs[selectedCompareIndex].after.photoUrl}
+                      alt="بعد العلاج"
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+
+                    {/* Before photo (clipped overlay) */}
+                    <div
+                      className="absolute inset-0"
+                      style={{ clipPath: `inset(0 ${100 - sliderPos}% 0 0)` }}
+                    >
+                      <img
+                        src={comparePairs[selectedCompareIndex].before.photoUrl}
+                        alt="قبل العلاج"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+
+                    {/* Slider handle */}
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-white/90 z-20 cursor-ew-resize"
+                      style={{ left: `${sliderPos}%`, transform: 'translateX(-50%)' }}
+                    >
+                      {/* Handle circle */}
+                      <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center border border-white/80">
+                        <div className="flex gap-0.5">
+                          <div className="w-0 h-3 border-r border-gray-500" />
+                          <div className="w-0 h-3 border-r border-gray-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Labels */}
+                    <Badge className="absolute top-3 right-3 bg-amber-500 text-white text-xs shadow-lg z-10">
+                      قبل العلاج
+                    </Badge>
+                    <Badge className="absolute top-3 left-3 bg-emerald-500 text-white text-xs shadow-lg z-10">
+                      بعد العلاج
+                    </Badge>
+
+                    {/* Drag instruction overlay */}
+                    <AnimatePresence>
+                      {!isDragging && (
+                        <motion.div
+                          className="absolute inset-0 flex items-center justify-center bg-black/20 z-30 cursor-ew-resize"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          onMouseDown={() => setIsDragging(true)}
+                          onTouchStart={() => setIsDragging(true)}
+                        >
+                          <div className="bg-black/60 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-sm">
+                            ← اسحب للمقارنة →
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Photo dates info */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                      <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-amber-600 font-medium">قبل العلاج</p>
+                        <p className="text-xs text-amber-800 truncate">
+                          {formatDate(comparePairs[selectedCompareIndex].before.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-emerald-600 font-medium">بعد العلاج</p>
+                        <p className="text-xs text-emerald-800 truncate">
+                          {formatDate(comparePairs[selectedCompareIndex].after.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pair navigation */}
+                  {comparePairs.length > 1 && (
+                    <div className="flex items-center justify-between">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedCompareIndex((prev) => Math.max(0, prev - 1))
+                          setSliderPos(50)
+                        }}
+                        disabled={selectedCompareIndex === 0}
+                        className="gap-1.5"
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" />
+                        السابق
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {selectedCompareIndex + 1} / {comparePairs.length}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedCompareIndex((prev) => Math.min(comparePairs.length - 1, prev + 1))
+                          setSliderPos(50)
+                        }}
+                        disabled={selectedCompareIndex === comparePairs.length - 1}
+                        className="gap-1.5"
+                      >
+                        التالي
+                        <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <GitCompare className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground text-sm">لا توجد أزواج للمقارنة</p>
+              <p className="text-xs text-muted-foreground mt-1">أضف صور قبل وبعد العلاج لتفعيل المقارنة</p>
+            </div>
           )}
         </DialogContent>
       </Dialog>

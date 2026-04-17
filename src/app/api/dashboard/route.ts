@@ -169,6 +169,91 @@ export async function GET() {
     const pendingPaymentsTotal = pendingPaymentsRes.rows[0]?.total ?? 0
     const pendingCount = pendingPaymentsRes.rows[0]?.count ?? 0
 
+    // Weekly prediction: avg visits per day this week
+    const weeklyVisitsRes = await query<{ count: number; is_today: number }>(
+      `SELECT COUNT(*)::int as count,
+        CASE WHEN EXTRACT(DOW FROM date) = EXTRACT(DOW FROM CURRENT_DATE) THEN 1 ELSE 0 END as is_today
+      FROM "Visit"
+      WHERE date >= date_trunc('week', CURRENT_DATE) AND date <= CURRENT_DATE
+      GROUP BY is_today`
+    )
+    const todayVisitsThisWeek = weeklyVisitsRes.rows.find(r => r.is_today === 1)?.count ?? 0
+    const otherDaysVisits = weeklyVisitsRes.rows.filter(r => r.is_today === 0)
+    const daysElapsed = otherDaysVisits.length + 1 // +1 for today
+    const totalWeekVisits = (otherDaysVisits.reduce((sum, r) => sum + r.count, 0)) + todayVisitsThisWeek
+    const avgPerDay = daysElapsed > 0 ? totalWeekVisits / daysElapsed : 0
+    const daysRemaining = 7 - daysElapsed
+    const predictedRestOfWeek = Math.round(avgPerDay * daysRemaining)
+    const weeklyPrediction = {
+      avgPerDay: Math.round(avgPerDay * 10) / 10,
+      daysElapsed,
+      daysRemaining,
+      totalSoFar: totalWeekVisits,
+      predictedRestOfWeek,
+      predictedTotal: totalWeekVisits + predictedRestOfWeek,
+    }
+
+    // Common diagnoses (top 5)
+    const commonDiagnosesRes = await query<{ condition: string; count: number }>(
+      `SELECT condition, COUNT(*)::int as count
+      FROM "Diagnosis"
+      GROUP BY condition
+      ORDER BY count DESC LIMIT 5`
+    )
+    const commonDiagnoses = commonDiagnosesRes.rows
+
+    // Laser packages expiring within 14 days
+    const expiringPackagesRes = await query<{
+      id: string; patientId: string; packageType: string; totalSessions: number; usedSessions: number
+      remainingSessions: number; startDate: string; expiryDate: string; status: string
+      createdAt: string; updatedAt: string; patientName: string
+    }>(
+      `SELECT lp.*, p.name as "patientName"
+      FROM "LaserPackage" lp
+      JOIN "Patient" p ON lp."patientId" = p.id
+      WHERE lp."expiryDate" IS NOT NULL
+        AND lp."expiryDate" <= CURRENT_DATE + INTERVAL '14 days'
+        AND lp."expiryDate" >= CURRENT_DATE
+        AND lp.status = 'active'
+      ORDER BY lp."expiryDate" ASC LIMIT 10`
+    )
+    const expiringPackages = expiringPackagesRes.rows
+
+    // Patients not following up (last visit > 30 days)
+    const patientsNotFollowingRes = await query<{
+      id: string; name: string; phone: string; lastVisit: string
+    }>(
+      `SELECT p.id, p.name, p.phone, MAX(v.date) as "lastVisit"
+      FROM "Patient" p
+      JOIN "Visit" v ON v."patientId" = p.id
+      GROUP BY p.id, p.name, p.phone
+      HAVING MAX(v.date) < CURRENT_DATE - INTERVAL '30 days'
+      ORDER BY MAX(v.date) ASC LIMIT 10`
+    )
+    const patientsNotFollowing = patientsNotFollowingRes.rows
+
+    // Monthly comparison: this month vs last month
+    const [thisMonthPatientsRes, lastMonthPatientsRes, thisMonthRevenueRes, lastMonthRevenueRes] = await Promise.all([
+      query<{ count: number }>(
+        `SELECT COUNT(DISTINCT "patientId")::int as count FROM "Visit" WHERE date >= date_trunc('month', CURRENT_DATE)`
+      ),
+      query<{ count: number }>(
+        `SELECT COUNT(DISTINCT "patientId")::int as count FROM "Visit" WHERE date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month') AND date < date_trunc('month', CURRENT_DATE)`
+      ),
+      query<{ total: number }>(
+        `SELECT COALESCE(SUM("paid"), 0)::float as total FROM "Visit" WHERE date >= date_trunc('month', CURRENT_DATE) AND "status" = 'completed'`
+      ),
+      query<{ total: number }>(
+        `SELECT COALESCE(SUM("paid"), 0)::float as total FROM "Visit" WHERE date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month') AND date < date_trunc('month', CURRENT_DATE) AND "status" = 'completed'`
+      ),
+    ])
+    const monthlyComparison = {
+      thisMonthPatients: thisMonthPatientsRes.rows[0]?.count ?? 0,
+      lastMonthPatients: lastMonthPatientsRes.rows[0]?.count ?? 0,
+      thisMonthRevenue: thisMonthRevenueRes.rows[0]?.total ?? 0,
+      lastMonthRevenue: lastMonthRevenueRes.rows[0]?.total ?? 0,
+    }
+
     return NextResponse.json({
       totalPatients,
       todayVisits,
@@ -182,6 +267,11 @@ export async function GET() {
       sessionTypeStats,
       pendingPayments: pendingPaymentsTotal,
       pendingCount,
+      weeklyPrediction,
+      commonDiagnoses,
+      expiringPackages,
+      patientsNotFollowing,
+      monthlyComparison,
     })
   } catch (error) {
     console.error('GET /api/dashboard error:', error)

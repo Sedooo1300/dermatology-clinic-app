@@ -1,15 +1,48 @@
 {
-  "name": "جلسات عيادة المغازى",
+  "name": "جلسات عيادة المغازى الجلدية",
   "short_name": "عيادة المغازى",
-  "description": "تطبيق إدارة عيادة جلدية - متابعة الحالات والجلسات والمالية",
+  "description": "تطبيق إدارة عيادة جلدية احترافي - متابعة الحالات والجلسات والليزر والمالية والوصفات الطبية",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#0d9488",
   "theme_color": "#0d9488",
   "dir": "rtl",
   "lang": "ar",
   "orientation": "any",
+  "scope": "/",
+  "categories": ["medical", "health", "business"],
+  "prefer_related_applications": false,
   "icons": [
+    {
+      "src": "/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
@@ -17,10 +50,37 @@
       "purpose": "any maskable"
     },
     {
+      "src": "/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "حالة جديدة",
+      "short_name": "جديد",
+      "url": "/",
+      "description": "إضافة حالة مريض جديدة"
+    },
+    {
+      "name": "التقويم",
+      "short_name": "تقويم",
+      "url": "/",
+      "description": "عرض التقويم والمواعيد"
+    },
+    {
+      "name": "الوصفات",
+      "short_name": "وصفات",
+      "url": "/",
+      "description": "الوصفات الطبية"
     }
   ]
 }

@@ -20,8 +20,11 @@ import { Switch } from '@/components/ui/switch'
 const themeOptions: { id: ThemeColor; label: string; color: string; className: string }[] = [
   { id: 'teal', label: 'أخضر مائي', color: 'bg-teal-500', className: '' },
   { id: 'blue', label: 'أزرق', color: 'bg-sky-500', className: '' },
+  { id: 'cyan', label: 'سماوي', color: 'bg-cyan-400', className: '' },
   { id: 'green', label: 'أخضر', color: 'bg-green-500', className: '' },
+  { id: 'lime', label: 'ليموني', color: 'bg-lime-500', className: '' },
   { id: 'purple', label: 'بنفسجي', color: 'bg-purple-500', className: '' },
+  { id: 'pink', label: 'وردي', color: 'bg-pink-500', className: '' },
   { id: 'orange', label: 'برتقالي', color: 'bg-orange-500', className: '' },
   { id: 'red', label: 'أحمر', color: 'bg-red-500', className: '' },
 ]
@@ -218,7 +221,7 @@ export function SettingsView() {
             {/* Color Theme */}
             <div>
               <p className="text-sm font-medium mb-2">لون التطبيق</p>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+              <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-3">
               {themeOptions.map((t) => (
                 <button
                   key={t.id}
@@ -376,7 +379,7 @@ export function SettingsView() {
               <Separator />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">قاعدة البيانات</span>
-                <span className="font-medium">SQLite + Prisma</span>
+                <span className="font-medium">PostgreSQL (Neon)</span>
               </div>
             </div>
           </CardContent>

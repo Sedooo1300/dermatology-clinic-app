@@ -9,8 +9,9 @@ import { AlertsWidget } from '@/components/dashboard/alerts-widget'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { CalendarDays, Users, Scissors, ArrowRight, Wallet, Zap, Calendar, ClipboardList, ListOrdered } from 'lucide-react'
+import { CalendarDays, Users, Scissors, ArrowRight, Wallet, Zap, Calendar, ClipboardList, ListOrdered, AlertTriangle, Clock, TrendingUp, TrendingDown, Activity } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 interface DashboardData {
   totalPatients: number
@@ -35,6 +36,29 @@ interface DashboardData {
   pendingPayments: number
   pendingCount: number
   sessionTypeStats: Array<{ name: string; _count: { visits: number } }>
+  weeklyPrediction: {
+    avgPerDay: number
+    daysElapsed: number
+    daysRemaining: number
+    totalSoFar: number
+    predictedRestOfWeek: number
+    predictedTotal: number
+  }
+  commonDiagnoses: Array<{ condition: string; count: number }>
+  expiringPackages: Array<{
+    id: string; patientId: string; patientName: string; packageType: string
+    totalSessions: number; usedSessions: number; remainingSessions: number
+    expiryDate: string; status: string
+  }>
+  patientsNotFollowing: Array<{
+    id: string; name: string; phone: string; lastVisit: string
+  }>
+  monthlyComparison: {
+    thisMonthPatients: number
+    lastMonthPatients: number
+    thisMonthRevenue: number
+    lastMonthRevenue: number
+  }
 }
 
 export function DashboardView() {
@@ -197,6 +221,320 @@ export function DashboardView() {
                       <Badge variant="secondary" className="text-xs">{st._count.visits} جلسة</Badge>
                     </div>
                   ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* Weekly Prediction & Monthly Comparison */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Weekly Prediction */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.85 }}>
+          <Card className="border-teal-200 dark:border-teal-900">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center">
+                  <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                </div>
+                <CardTitle className="text-base font-bold">توقعات الأسبوع</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="p-3 rounded-xl bg-teal-50 dark:bg-teal-950/20">
+                  <p className="text-2xl font-bold text-teal-600 dark:text-teal-400">
+                    {data?.weeklyPrediction?.totalSoFar ?? 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">زيارات فعلية</p>
+                </div>
+                <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-950/20">
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                    {data?.weeklyPrediction?.predictedRestOfWeek ?? 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">زيارات متوقعة</p>
+                </div>
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20">
+                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                    {data?.weeklyPrediction?.predictedTotal ?? 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">إجمالي متوقع</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-sm p-3 rounded-lg bg-muted/50">
+                <span className="text-muted-foreground">متوسط الزيارات يومياً</span>
+                <span className="font-semibold">{data?.weeklyPrediction?.avgPerDay ?? 0} زيارة</span>
+              </div>
+              <div className="flex items-center justify-between text-sm p-3 rounded-lg bg-muted/50">
+                <span className="text-muted-foreground">الأيام المتبقية</span>
+                <span className="font-semibold">{data?.weeklyPrediction?.daysRemaining ?? 0} يوم</span>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Monthly Comparison */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}>
+          <Card className="border-violet-200 dark:border-violet-900">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                </div>
+                <CardTitle className="text-base font-bold">مقارنة الأشهر</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Patients comparison */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">المرضى</span>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const mc = data?.monthlyComparison
+                      const diff = mc ? mc.thisMonthPatients - mc.lastMonthPatients : 0
+                      const pct = mc && mc.lastMonthPatients > 0 ? Math.round((diff / mc.lastMonthPatients) * 100) : 0
+                      return diff >= 0 ? (
+                        <Badge variant="default" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 gap-1">
+                          <TrendingUp className="w-3 h-3" />
+                          {pct > 0 ? `+${pct}%` : '0%'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 gap-1">
+                          <TrendingDown className="w-3 h-3" />
+                          {pct}%
+                        </Badge>
+                      )
+                    })()}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground mb-1">الشهر الحالي</p>
+                    <p className="text-lg font-bold text-violet-600 dark:text-violet-400">
+                      {data?.monthlyComparison?.thisMonthPatients ?? 0}
+                    </p>
+                  </div>
+                  <div className="text-muted-foreground text-sm">vs</div>
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground mb-1">الشهر السابق</p>
+                    <p className="text-lg font-bold">
+                      {data?.monthlyComparison?.lastMonthPatients ?? 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t dark:border-muted" />
+
+              {/* Revenue comparison */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">الإيرادات</span>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const mc = data?.monthlyComparison
+                      const diff = mc ? mc.thisMonthRevenue - mc.lastMonthRevenue : 0
+                      const pct = mc && mc.lastMonthRevenue > 0 ? Math.round((diff / mc.lastMonthRevenue) * 100) : 0
+                      return diff >= 0 ? (
+                        <Badge variant="default" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 gap-1">
+                          <TrendingUp className="w-3 h-3" />
+                          {pct > 0 ? `+${pct}%` : '0%'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 gap-1">
+                          <TrendingDown className="w-3 h-3" />
+                          {pct}%
+                        </Badge>
+                      )
+                    })()}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground mb-1">الشهر الحالي</p>
+                    <p className="text-lg font-bold text-violet-600 dark:text-violet-400">
+                      {(data?.monthlyComparison?.thisMonthRevenue ?? 0).toLocaleString('ar-EG')} ج.م
+                    </p>
+                  </div>
+                  <div className="text-muted-foreground text-sm">vs</div>
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground mb-1">الشهر السابق</p>
+                    <p className="text-lg font-bold">
+                      {(data?.monthlyComparison?.lastMonthRevenue ?? 0).toLocaleString('ar-EG')} ج.م
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* Common Diagnoses Chart */}
+      {(data?.commonDiagnoses && data.commonDiagnoses.length > 0) && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.95 }}>
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                  <ClipboardList className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                </div>
+                <CardTitle className="text-base font-bold">أكثر التشخيصات شيوعاً</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                <div className="h-56 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={data.commonDiagnoses}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="count"
+                        nameKey="condition"
+                      >
+                        {data.commonDiagnoses.map((_, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={['#0d9488', '#f59e0b', '#8b5cf6', '#ef4444', '#3b82f6'][index % 5]}
+                          />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-3">
+                  {data.commonDiagnoses.map((diagnosis, index) => {
+                    const total = data.commonDiagnoses.reduce((s, d) => s + d.count, 0)
+                    const pct = total > 0 ? Math.round((diagnosis.count / total) * 100) : 0
+                    return (
+                      <div key={diagnosis.condition} className="flex items-center gap-3">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: ['#0d9488', '#f59e0b', '#8b5cf6', '#ef4444', '#3b82f6'][index % 5] }}
+                        />
+                        <span className="text-sm flex-1 truncate">{diagnosis.condition}</span>
+                        <Badge variant="secondary" className="text-xs">{diagnosis.count}</Badge>
+                        <span className="text-xs text-muted-foreground w-10 text-left">{pct}%</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Smart Alerts Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Patients Not Following Up */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.0 }}>
+          <Card className="border-red-200 dark:border-red-900">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                    <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                  </div>
+                  <CardTitle className="text-base font-bold">مرضى لم يتابعوا</CardTitle>
+                </div>
+                {data?.patientsNotFollowing && data.patientsNotFollowing.length > 0 && (
+                  <Badge variant="destructive" className="text-xs">{data.patientsNotFollowing.length}</Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
+                {(!data?.patientsNotFollowing || data.patientsNotFollowing.length === 0) ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">لا يوجد مرضى متأخرين عن المتابعة 🎉</p>
+                ) : (
+                  data.patientsNotFollowing.map((patient, index) => (
+                    <motion.div
+                      key={patient.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 1.05 + index * 0.05 }}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="w-4 h-4 text-red-500 dark:text-red-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{patient.name}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          آخر زيارة: {new Date(patient.lastVisit).toLocaleDateString('ar-EG')}
+                        </p>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Expiring Laser Packages */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.05 }}>
+          <Card className="border-orange-200 dark:border-orange-900">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                    <Clock className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <CardTitle className="text-base font-bold">باقات ليزر تنتهي قريباً</CardTitle>
+                </div>
+                {data?.expiringPackages && data.expiringPackages.length > 0 && (
+                  <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs">
+                    {data.expiringPackages.length}
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
+                {(!data?.expiringPackages || data.expiringPackages.length === 0) ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">لا توجد باقات تنتهي قريباً ✨</p>
+                ) : (
+                  data.expiringPackages.map((pkg, index) => {
+                    const daysUntilExpiry = Math.ceil(
+                      (new Date(pkg.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                    )
+                    return (
+                      <motion.div
+                        key={pkg.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 1.1 + index * 0.05 }}
+                        className="flex items-center gap-3 p-3 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/50"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center flex-shrink-0">
+                          <Zap className="w-4 h-4 text-orange-500 dark:text-orange-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{pkg.patientName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {pkg.packageType} • متبقي {pkg.remainingSessions} جلسة
+                          </p>
+                        </div>
+                        <Badge
+                          variant="destructive"
+                          className={`text-xs flex-shrink-0 ${daysUntilExpiry > 7 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : ''}`}
+                        >
+                          {daysUntilExpiry === 0 ? 'اليوم' : `${daysUntilExpiry} يوم`}
+                        </Badge>
+                      </motion.div>
+                    )
+                  })
+                )}
               </div>
             </CardContent>
           </Card>

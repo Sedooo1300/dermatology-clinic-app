@@ -16,7 +16,7 @@ export type AppView =
   | 'prescriptions'
   | 'queue'
 
-export type ThemeColor = 'teal' | 'blue' | 'purple' | 'orange' | 'red' | 'green'
+export type ThemeColor = 'teal' | 'blue' | 'purple' | 'orange' | 'red' | 'green' | 'pink' | 'cyan' | 'lime'
 
 interface AppState {
   // Navigation
@@ -78,6 +78,9 @@ export const useAppStore = create<AppState>()(
           orange: 'orange',
           red: 'red',
           green: 'green',
+          pink: 'pink',
+          cyan: 'cyan',
+          lime: 'lime',
         }
         const themeVal = themeMap[color]
         if (themeVal) {
