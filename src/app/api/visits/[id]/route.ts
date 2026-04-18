@@ -78,7 +78,11 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await req.json()
-    const { patientId, sessionTypeId, date, price, paid, remaining, notes, status } = body
+    const { patientId, sessionTypeId, date, price, paid, notes, status } = body
+
+    const priceVal = price !== undefined ? parseFloat(price) : undefined
+    const paidVal = paid !== undefined ? parseFloat(paid) : undefined
+    const remaining = (priceVal !== undefined && paidVal !== undefined) ? priceVal - paidVal : undefined
 
     const result = await query(
       `UPDATE "Visit"
@@ -89,9 +93,9 @@ export async function PUT(
         patientId || null,
         sessionTypeId || null,
         date ? new Date(date) : undefined,
-        price !== undefined ? parseFloat(price) : undefined,
-        paid !== undefined ? parseFloat(paid) : undefined,
-        remaining !== undefined ? parseFloat(remaining) : undefined,
+        priceVal,
+        paidVal,
+        remaining,
         notes?.trim() || null,
         status || undefined,
         new Date(),

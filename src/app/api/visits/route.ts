@@ -124,11 +124,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { patientId, sessionTypeId, date, price, paid, remaining, notes, status } = body
+    const { patientId, sessionTypeId, date, price, paid, notes, status } = body
 
     if (!patientId) {
       return NextResponse.json({ error: 'يرجى اختيار المريض' }, { status: 400 })
     }
+
+    const priceVal = parseFloat(price) || 0
+    const paidVal = parseFloat(paid) || 0
+    const remaining = priceVal - paidVal
 
     const id = uuid()
     const now = new Date()
@@ -144,7 +148,7 @@ export async function POST(req: NextRequest) {
         date ? new Date(date) : now,
         parseFloat(price) || 0,
         parseFloat(paid) || 0,
-        parseFloat(remaining) || 0,
+        remaining,
         notes?.trim() || null,
         status || 'completed',
         now,

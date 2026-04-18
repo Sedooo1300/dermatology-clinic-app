@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     let paramIndex = 1
 
     if (search) {
-      conditions.push(`("name" ILIKE '%' || $${paramIndex} || '%' OR "phone" ILIKE '%' || $${paramIndex} || '%')`)
+      conditions.push(`("name" ILIKE '%' || $${paramIndex} || '%' OR "phone" ILIKE '%' || $${paramIndex} || '%' OR "address" ILIKE '%' || $${paramIndex} || '%')`)
       params.push(search)
       paramIndex++
     }
@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
       phone: row.phone,
       age: row.age,
       gender: row.gender,
+      address: row.address,
       notes: row.notes,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, phone, age, gender, notes } = body
+    const { name, phone, age, gender, address, notes } = body
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 })
@@ -81,8 +82,8 @@ export async function POST(req: NextRequest) {
     const now = new Date()
 
     const result = await query(
-      `INSERT INTO "Patient" ("id", "name", "phone", "age", "gender", "notes", "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO "Patient" ("id", "name", "phone", "age", "gender", "address", "notes", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         id,
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest) {
         phone?.trim() || null,
         age ? parseInt(age) : null,
         gender || 'male',
+        address?.trim() || null,
         notes?.trim() || null,
         now,
         now,

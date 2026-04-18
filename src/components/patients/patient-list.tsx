@@ -43,7 +43,7 @@ export function PatientList() {
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null)
-  const [formData, setFormData] = useState({ name: '', phone: '', age: '', gender: 'male', notes: '' })
+  const [formData, setFormData] = useState({ name: '', phone: '', age: '', gender: 'male', address: '', notes: '' })
 
   const fetchPatients = useCallback(async () => {
     setIsLoading(true)
@@ -93,7 +93,7 @@ export function PatientList() {
       }
       setShowForm(false)
       setEditingPatient(null)
-      setFormData({ name: '', phone: '', age: '', gender: 'male', notes: '' })
+      setFormData({ name: '', phone: '', age: '', gender: 'male', address: '', notes: '' })
       fetchPatients()
     } catch {
       toast.error('خطأ في حفظ البيانات')
@@ -120,6 +120,7 @@ export function PatientList() {
       phone: patient.phone || '',
       age: patient.age?.toString() || '',
       gender: patient.gender,
+      address: (patient as any).address || '',
       notes: patient.notes || '',
     })
     setShowForm(true)
@@ -153,7 +154,7 @@ export function PatientList() {
             <SelectItem value="female">أنثى</SelectItem>
           </SelectContent>
         </Select>
-        <Button onClick={() => { setEditingPatient(null); setFormData({ name: '', phone: '', age: '', gender: 'male', notes: '' }); setShowForm(true) }} className="gap-2 bg-primary text-primary-foreground">
+        <Button onClick={() => { setEditingPatient(null); setFormData({ name: '', phone: '', age: '', gender: 'male', address: '', notes: '' }); setShowForm(true) }} className="gap-2 bg-primary text-primary-foreground">
           <Plus className="w-4 h-4" />
           حالة جديدة
         </Button>
@@ -288,6 +289,14 @@ export function PatientList() {
                   placeholder="العمر"
                 />
               </div>
+            </div>
+            <div>
+              <Label>العنوان</Label>
+              <Input
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                placeholder="عنوان المريض..."
+              />
             </div>
             <div>
               <Label>الجنس</Label>

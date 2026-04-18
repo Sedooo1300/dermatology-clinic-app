@@ -40,7 +40,7 @@ export function VisitList() {
   const [statusFilter, setStatusFilter] = useState('')
   const [formData, setFormData] = useState({
     patientId: '', sessionTypeId: '', date: new Date().toISOString().split('T')[0],
-    price: '', paid: '', remaining: '', notes: '', status: 'completed',
+    price: '', paid: '', notes: '', status: 'completed',
   })
 
   const fetchVisits = useCallback(async () => {
@@ -84,14 +84,11 @@ export function VisitList() {
       ...formData,
       sessionTypeId: stId,
       price: st?.price?.toString() || '',
-      remaining: st?.price ? (parseFloat(formData.paid || '0') - st.price).toString() : '',
     })
   }
 
   const handlePaidChange = (paid: string) => {
-    const paidVal = parseFloat(paid) || 0
-    const priceVal = parseFloat(formData.price) || 0
-    setFormData({ ...formData, paid, remaining: (priceVal - paidVal).toString() })
+    setFormData({ ...formData, paid })
   }
 
   const handleSubmit = async () => {
@@ -142,7 +139,6 @@ export function VisitList() {
       date: item.date.split('T')[0],
       price: item.price.toString(),
       paid: item.paid.toString(),
-      remaining: item.remaining.toString(),
       notes: item.notes || '',
       status: item.status,
     })
@@ -150,7 +146,7 @@ export function VisitList() {
   }
 
   const resetForm = () => {
-    setFormData({ patientId: '', sessionTypeId: '', date: new Date().toISOString().split('T')[0], price: '', paid: '', remaining: '', notes: '', status: 'completed' })
+    setFormData({ patientId: '', sessionTypeId: '', date: new Date().toISOString().split('T')[0], price: '', paid: '', notes: '', status: 'completed' })
   }
 
   return (
@@ -207,9 +203,6 @@ export function VisitList() {
                         <div className="flex items-center gap-3 mt-1">
                           <span className="text-xs text-muted-foreground">{formatDate(visit.date)}</span>
                           <span className="text-xs font-medium text-emerald-600">مدفوع: {formatCurrency(visit.paid)}</span>
-                          {visit.remaining > 0 && (
-                            <span className="text-xs text-red-500">متبقي: {formatCurrency(visit.remaining)}</span>
-                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -283,22 +276,14 @@ export function VisitList() {
               <Input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>السعر</Label>
-                <Input type="number" value={formData.price} onChange={(e) => {
-                  const price = e.target.value
-                  const paidVal = parseFloat(formData.paid) || 0
-                  setFormData({ ...formData, price, remaining: (parseFloat(price) || 0 - paidVal).toString() })
-                }} />
+                <Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} />
               </div>
               <div>
                 <Label>المدفوع</Label>
                 <Input type="number" value={formData.paid} onChange={(e) => handlePaidChange(e.target.value)} />
-              </div>
-              <div>
-                <Label>المتبقي</Label>
-                <Input type="number" value={formData.remaining} readOnly className="bg-muted" />
               </div>
             </div>
 

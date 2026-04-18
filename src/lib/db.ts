@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS "Patient" (
   "phone" TEXT,
   "age" INTEGER,
   "gender" TEXT NOT NULL DEFAULT 'male',
+  "address" TEXT,
   "notes" TEXT,
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -403,6 +404,13 @@ export async function setupDatabase(): Promise<{ created: string[]; totalTables:
         console.error(`Error creating table: ${msg}`)
       }
     }
+  }
+
+  // Run migrations: add address column to Patient if missing
+  try {
+    await pool.query(`ALTER TABLE "Patient" ADD COLUMN IF NOT EXISTS "address" TEXT`)
+  } catch {
+    // ignore
   }
 
   const tables = await pool.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`)

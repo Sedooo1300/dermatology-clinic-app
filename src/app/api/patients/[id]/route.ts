@@ -96,6 +96,7 @@ export async function GET(
       phone: patient.phone,
       age: patient.age,
       gender: patient.gender,
+      address: patient.address,
       notes: patient.notes,
       createdAt: patient.createdAt,
       updatedAt: patient.updatedAt,
@@ -121,18 +122,19 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await req.json()
-    const { name, phone, age, gender, notes } = body
+    const { name, phone, age, gender, address, notes } = body
 
     const result = await query(
       `UPDATE "Patient"
-       SET name = $1, phone = $2, age = $3, gender = $4, notes = $5, "updatedAt" = $6
-       WHERE id = $7
+       SET name = $1, phone = $2, age = $3, gender = $4, address = $5, notes = $6, "updatedAt" = $7
+       WHERE id = $8
        RETURNING *`,
       [
         name?.trim() || undefined,
         phone?.trim() || null,
         age ? parseInt(age) : null,
         gender || undefined,
+        address?.trim() || null,
         notes?.trim() || null,
         new Date(),
         id,
